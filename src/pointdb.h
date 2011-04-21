@@ -2,28 +2,21 @@
 #define POINTDB_H
 
 #include <stdint.h>
+#include "emap.h"
 
-#if defined(EMAP_POINT_DOUBLE)
 typedef struct {
-        double y;   /**< dependent variable */
-        double x[]; /**< inline array of independent variables */
+        emap_float y;   /**< dependent variable */
+        emap_float x[]; /**< inline array of independent variables */
 } emap_point_t;
 
-#define EMAP_POINT_SIZE(arity) (sizeof(emap_point_t) + (sizeof(double) * (arity)))
-#else
-typedef struct {
-        float y;   /**< dependent variable */
-        float x[]; /**< inline array of independent variables */
-} emap_point_t;
-
-#define EMAP_POINT_SIZE(arity) (sizeof(emap_point_t) + (sizeof(float) * (arity)))
-#endif
+#define EMAP_POINT_SIZE(arity) (sizeof(emap_point_t) + (sizeof(emap_float) * (arity)))
 
 typedef struct {
-        uint16_t      flags; /**< flags */
-        uint16_t      arity; /**< number of independent variables */
-        size_t        count; /**< number of points in the array */
-        emap_point_t *point; /**< array of points */
+        uint16_t       flags; /**< flags */
+        uint16_t       arity; /**< number of independent variables */
+        size_t         count; /**< number of points in the array */
+        emap_point_t  *point; /**< array of points */
+        emap_point_t **psort; /**< array of sorted points by each independent variable */
 } emap_pointdb_t;
 
 #define EMAP_PDBF_INIT 0x0001 /**< set if properly initialized */
@@ -34,6 +27,18 @@ typedef struct {
 #define EMAP_PDB_INITIALIZED(p)                         \
         do {                                            \
                 if (!((p)->flags & EMAP_PDBF_INIT))     \
+                        abort();                        \
+        } while(0)
+
+#define EMAP_PDB_LOADED(p)                              \
+        do {                                            \
+                if (!((p)->flags & EMAP_PDBF_LOAD))     \
+                        abort();                        \
+        } while(0)
+
+#define EMAP_PDB_SORTED(p)                              \
+        do {                                            \
+                if (!((p)->flags & EMAP_PDBF_SORT))     \
                         abort();                        \
         } while(0)
 

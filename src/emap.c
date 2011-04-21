@@ -90,6 +90,13 @@ int main(int argc, char *argv[])
                 return (EXIT_FAILURE);
         }
 
+        ret = emap_pointdb_sort(&pdb);
+
+        if (ret != EMAP_SUCCESS) {
+                fprintf(stderr, "Unable to sort data points from \"%s\": ret=%d\n", path_in, ret);
+                return (EXIT_FAILURE);
+        }
+
         emap_pointdb_free(&pdb);
 
         if (path_in != NULL)

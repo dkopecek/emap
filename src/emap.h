@@ -1,8 +1,27 @@
 #ifndef EMAP_H
 #define EMAP_H
+#include <assert.h>
 
 #define EMAP_COMMENT_CHARS "#;"
 #define EMAP_FLTCMP_DELTA 1e-6
+
+#include <math.h>
+
+#if defined(EMAP_POINT_DOUBLE)
+typedef double emap_float;
+
+static inline emap_float emap_float_abs(emap_float n)
+{
+        return fabs(n);
+}
+#else
+typedef float  emap_float;
+
+static inline emap_float emap_float_abs(emap_float n)
+{
+        return fabsf(n);
+}
+#endif
 
 #define EMAP_SUCCESS  0
 #define EMAP_EFAULT   1

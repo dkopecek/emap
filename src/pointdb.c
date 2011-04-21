@@ -16,6 +16,7 @@ emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb)
         pdb->arity = 0;
         pdb->count = 0;
         pdb->point = NULL;
+        pdb->psort = NULL;
 
         return (pdb);
 }
@@ -146,7 +147,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
         pdb->count = lines;
 
 #ifndef NDEBUG
-        fprintf(stderr, "DEBUG: allocating %u MiB of memory for data points (point = %u bytes)\n",
+        fprintf(stderr, "DEBUG: allocating %zu MiB of memory for data points (point = %zu bytes)\n",
                 (EMAP_POINT_SIZE(pdb->arity) * lines)/(1024*1024), EMAP_POINT_SIZE(pdb->arity));
 #endif
         pdb->point = malloc(EMAP_POINT_SIZE(pdb->arity) * lines);
@@ -266,5 +267,90 @@ _done:
 #ifndef NDEBUG
         fprintf(stderr, "DEBUG: loaded %zu data points from %s\n", pdb->count, path);
 #endif
+        return (EMAP_SUCCESS);
+}
+
+static int _pointcmp_stage1(const emap_point_t *a, const emap_point_t *b)
+{
+        emap_float d = a->y - b->y;
+
+        if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
+                return 0;
+        if (d > 0)
+                return 1;
+        else
+                return -1;
+}
+
+static int _pointcmp_stage2_x = -1;
+
+static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b)
+{
+        emap_float d = (*a)->x[_pointcmp_stage2_x] - (*b)->x[_pointcmp_stage2_x];
+
+        assert(_pointcmp_stage2_x != -1);
+
+        if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
+                return 0;
+        if (d > 0)
+                return 1;
+        else
+                return -1;
+}
+
+int emap_pointdb_sort(emap_pointdb_t *pdb)
+{
+        register int i;
+
+        if (pdb == NULL)
+                return (EMAP_EFAULT);
+
+        EMAP_PDB_INITIALIZED(pdb);
+        EMAP_PDB_LOADED(pdb);
+
+        /*
+         * prepare pointer arrays
+         */
+#ifndef NDEBUG
+        fprintf(stderr, "DEBUG: Allocating %zu MiB of memory for the `psort' array\n",
+                (sizeof(emap_point_t *) * pdb->count * pdb->arity)/(1024*1024));
+#endif
+        pdb->psort = malloc((sizeof(emap_point_t *) * pdb->count) * pdb->arity);
+
+        if (pdb->psort == NULL) {
+#ifndef NDEBUG
+                fprintf(stderr, "DEBUG: Allocation failed.\n");
+#endif
+                return (EMAP_ENOMEM);
+        }
+
+        /*
+         * sort by the dependent variable first, since it would invalidate the
+         * pointer array otherwise.
+         */
+        qsort(pdb->point, pdb->count, EMAP_POINT_SIZE(pdb->arity),
+              (int(*)(const void *, const void *))_pointcmp_stage1);
+
+        /*
+         * prepare psort arrays for sorting
+         */
+        for (i = 0; i < pdb->count; ++i)
+                pdb->psort[i] = pdb->point + i;
+
+        for (i = 1; i < pdb->arity; ++i)
+                memcpy(pdb->psort + (i * pdb->count), pdb->psort, sizeof(emap_point_t *) * pdb->count);
+
+        /*
+         * sort the psort arrays
+         */
+        for (i = 0; i < pdb->arity; ++i) {
+                _pointcmp_stage2_x = i;
+                qsort(pdb->psort + (i * pdb->count), pdb->count, sizeof(emap_point_t *),
+                      (int(*)(const void *, const void *))_pointcmp_stage2);
+        }
+
+        _pointcmp_stage2_x = -1;
+        pdb->flags |= EMAP_PDBF_SORT;
+
         return (EMAP_SUCCESS);
 }
