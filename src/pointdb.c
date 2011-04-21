@@ -25,7 +25,8 @@ void emap_pointdb_free(emap_pointdb_t *pdb)
 {
         if (pdb->point != NULL)
                 free(pdb->point);
-
+        if (pdb->psort != NULL)
+                free(pdb->psort);
         if (pdb->flags & EMAP_PDBF_FREE)
                 free(pdb);
 }
@@ -36,12 +37,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
         FILE  *fp;
         char   line_buffer[EMAP_LINEBUFFER_SIZE], *row, **tok, *toksave;
         register int i, ts, lines, gi, xi, pi;
-
-#if defined(EMAP_POINT_DOUBLE)
-        double res;
-#else
-        float  res;
-#endif
+        emap_float res;
 
         if (pdb == NULL || path == NULL)
                 return (EMAP_EFAULT);
@@ -164,13 +160,16 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
         else
                 --y_n;
 
+#ifndef NDEBUG
+        fprintf(stderr, "DEBUG: y_n = %u\n", y_n);
+#endif
         pi = 0;
 
         do {
                 /*
                  * convert
                  */
-                for (gi = 0, xi = 0; xi < pdb->arity; ++xi) {
+                for (gi = 0, xi = 0; gi < ts; ++gi) {
                         toksave = NULL;
                         errno   = 0;
 
@@ -181,9 +180,15 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
 #endif
                         /* convert string token to float/double */
                         if (gi == y_n)
-                                pdb->point[pi].y     = res = STR2FLT(tok[gi], &toksave);
-                        else
-                                pdb->point[pi].x[xi] = res = STR2FLT(tok[gi], &toksave);
+                                emap_pointp(pdb, pi)->y     = res = STR2FLT(tok[gi], &toksave);
+                        else {
+                                emap_pointp(pdb, pi)->x[xi] = res = STR2FLT(tok[gi], &toksave);
+                                ++xi;
+                        }
+
+#if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
+                        fprintf(stderr, "\"%s\" => %"EMAP_FLTFMT"| ", tok[gi], res);
+#endif
 
                         /* error check */
                         if ((res == 0 && toksave == tok[gi]) || errno == ERANGE) {
@@ -194,6 +199,9 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
                                 return (EMAP_EINVAL);
                         }
                 }
+#if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
+                fprintf(stderr, "\n");
+#endif
 
                 /*
                  * checks
@@ -274,6 +282,10 @@ static int _pointcmp_stage1(const emap_point_t *a, const emap_point_t *b)
 {
         emap_float d = a->y - b->y;
 
+#if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
+        fprintf(stderr, "%"EMAP_FLTFMT" - %"EMAP_FLTFMT"\n", a->y, b->y);
+#endif
+
         if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
                 return 0;
         if (d > 0)
@@ -328,6 +340,10 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
          * sort by the dependent variable first, since it would invalidate the
          * pointer array otherwise.
          */
+#ifndef NDEBUG
+        fprintf(stderr, "DEBUG: Sorting `point' array %p, %zu items, item size is %zu (arity is %u)\n",
+                pdb->point, pdb->count, EMAP_POINT_SIZE(pdb->arity), pdb->arity);
+#endif
         qsort(pdb->point, pdb->count, EMAP_POINT_SIZE(pdb->arity),
               (int(*)(const void *, const void *))_pointcmp_stage1);
 

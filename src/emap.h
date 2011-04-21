@@ -4,11 +4,11 @@
 
 #define EMAP_COMMENT_CHARS "#;"
 #define EMAP_FLTCMP_DELTA 1e-6
-
 #include <math.h>
 
 #if defined(EMAP_POINT_DOUBLE)
 typedef double emap_float;
+#define EMAP_FLTFMT "f"
 
 static inline emap_float emap_float_abs(emap_float n)
 {
@@ -16,6 +16,7 @@ static inline emap_float emap_float_abs(emap_float n)
 }
 #else
 typedef float  emap_float;
+#define EMAP_FLTFMT "f"
 
 static inline emap_float emap_float_abs(emap_float n)
 {

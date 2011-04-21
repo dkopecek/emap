@@ -19,6 +19,16 @@ typedef struct {
         emap_point_t **psort; /**< array of sorted points by each independent variable */
 } emap_pointdb_t;
 
+static inline emap_point_t *emap_pointp(emap_pointdb_t *pdb, size_t pi)
+{
+        return (emap_point_t *)(((uint8_t *)(pdb->point)) + (EMAP_POINT_SIZE(pdb->arity) * pi));
+}
+
+static inline emap_point_t *emap_psortp(emap_pointdb_t *pdb, size_t xn, size_t xi)
+{
+        return (NULL);
+}
+
 #define EMAP_PDBF_INIT 0x0001 /**< set if properly initialized */
 #define EMAP_PDBF_FREE 0x0002 /**< set if memory for the struct was dynamically allocated */
 #define EMAP_PDBF_LOAD 0x0004 /**< set if some data points were loaded */
