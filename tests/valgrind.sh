@@ -5,7 +5,7 @@ valgrind --log-file=valgrind.log \
          --read-var-info=yes     \
          --track-origins=yes     \
          -q \
-         ${srcdir}/../src/emap ${srcdir}/data/test.dat 2>&1 > vgoutput.log
+         ${BUILDDIR}/src/emap ${srcdir}/data/test.dat 2>&1 > vgoutput.log
 
 if [ "$(wc -l valgrind.log | sed -n 's|^\([0-9]*\).*$|\1|p')" -gt 0 ]; then
     cat valgrind.log
