@@ -28,6 +28,7 @@ AC_CHECK_HEADERS([stdlib.h])
 
 AC_CONFIG_FILES([Makefile
                  doc/Makefile
-                 src/Makefile])
+                 src/Makefile
+                 tests/Makefile])
 
 AC_OUTPUT
