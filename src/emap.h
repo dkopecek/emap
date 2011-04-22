@@ -14,6 +14,11 @@ static inline emap_float emap_float_abs(emap_float n)
 {
         return fabs(n);
 }
+
+static inline emap_float emap_strtoflt(const char *str, char **save)
+{
+        return strtod(str, save);
+}
 #else
 typedef float  emap_float;
 #define EMAP_FLTFMT "f"
@@ -21,6 +26,11 @@ typedef float  emap_float;
 static inline emap_float emap_float_abs(emap_float n)
 {
         return fabsf(n);
+}
+
+static inline emap_float emap_strtoflt(const char *str, char **save)
+{
+        return strtof(str, save);
 }
 #endif
 

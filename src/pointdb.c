@@ -173,16 +173,11 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
                         toksave = NULL;
                         errno   = 0;
 
-#if defined(EMAP_POINT_DOUBLE)
-# define STR2FLT(n, p) strtod((n), (p))
-#else
-# define STR2FLT(n, p) strtof((n), (p))
-#endif
                         /* convert string token to float/double */
                         if (gi == y_n)
-                                emap_pointp(pdb, pi)->y     = res = STR2FLT(tok[gi], &toksave);
+                                emap_pointp(pdb, pi)->y     = res = emap_strtoflt(tok[gi], &toksave);
                         else {
-                                emap_pointp(pdb, pi)->x[xi] = res = STR2FLT(tok[gi], &toksave);
+                                emap_pointp(pdb, pi)->x[xi] = res = emap_strtoflt(tok[gi], &toksave);
                                 ++xi;
                         }
 
@@ -361,6 +356,9 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
          */
         for (i = 0; i < pdb->arity; ++i) {
                 _pointcmp_stage2_x = i;
+#ifndef NDEBUG
+                fprintf(stderr, "DEBUG: Sorting `psort' array %p (x = %u)\n", pdb->psort + (i * pdb->count), i);
+#endif
                 qsort(pdb->psort + (i * pdb->count), pdb->count, sizeof(emap_point_t *),
                       (int(*)(const void *, const void *))_pointcmp_stage2);
         }
