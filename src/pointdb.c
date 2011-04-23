@@ -280,13 +280,20 @@ static int _pointcmp_stage1(const emap_point_t *a, const emap_point_t *b)
 #if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
         fprintf(stderr, "%"EMAP_FLTFMT" - %"EMAP_FLTFMT"\n", a->y, b->y);
 #endif
-
+        if (d < 0)
+                return -1;
+        if (d > 0)
+                return 1;
+        else
+                return 0;
+#if 0
         if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
                 return 0;
         if (d > 0)
                 return 1;
         else
                 return -1;
+#endif
 }
 
 static int _pointcmp_stage2_x = -1;
@@ -297,12 +304,20 @@ static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b)
 
         assert(_pointcmp_stage2_x != -1);
 
+        if (d < 0)
+                return -1;
+        if (d > 0)
+                return 1;
+        else
+                return 0;
+#if 0
         if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
                 return 0;
         if (d > 0)
                 return 1;
         else
                 return -1;
+#endif
 }
 
 int emap_pointdb_sort(emap_pointdb_t *pdb)
@@ -339,14 +354,14 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
         fprintf(stderr, "DEBUG: Sorting `point' array %p, %zu items, item size is %zu (arity is %u)\n",
                 pdb->point, pdb->count, EMAP_POINT_SIZE(pdb->arity), pdb->arity);
 #endif
-        qsort(pdb->point, pdb->count, EMAP_POINT_SIZE(pdb->arity),
+        qsort(&pdb->point[0], pdb->count, EMAP_POINT_SIZE(pdb->arity),
               (int(*)(const void *, const void *))_pointcmp_stage1);
 
         /*
          * prepare psort arrays for sorting
          */
         for (i = 0; i < pdb->count; ++i)
-                pdb->psort[i] = pdb->point + i;
+                pdb->psort[i] = emap_pointp(pdb, i);
 
         for (i = 1; i < pdb->arity; ++i)
                 memcpy(pdb->psort + (i * pdb->count), pdb->psort, sizeof(emap_point_t *) * pdb->count);
@@ -366,5 +381,29 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
         _pointcmp_stage2_x = -1;
         pdb->flags |= EMAP_PDBF_SORT;
 
+#ifndef NDEBUG
+        {
+                emap_float prev;
+                int x;
+                /*
+                 * Check that everything is sorted properly
+                 */
+                prev = emap_pointp(pdb, 0)->y;
+
+                for (i = 1; i < pdb->count; ++i) {
+                        assert(prev <= emap_pointp(pdb, i)->y);
+                        prev = emap_pointp(pdb, i)->y;
+                }
+
+                for (x = 0; x < pdb->arity; ++x) {
+                        prev = emap_psortp(pdb, x, 0)->x[x];
+
+                        for (i = 1; i < pdb->count; ++i) {
+                                assert(prev <= emap_psortp(pdb, x, i)->x[x]);
+                                prev = emap_psortp(pdb, x, i)->x[x];
+                        }
+                }
+        }
+#endif
         return (EMAP_SUCCESS);
 }

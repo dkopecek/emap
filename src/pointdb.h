@@ -26,7 +26,7 @@ static inline emap_point_t *emap_pointp(emap_pointdb_t *pdb, size_t pi)
 
 static inline emap_point_t *emap_psortp(emap_pointdb_t *pdb, size_t xn, size_t xi)
 {
-        return (NULL);
+        return ((emap_point_t **)(pdb->psort + xn * pdb->count))[xi];
 }
 
 #define EMAP_PDBF_INIT 0x0001 /**< set if properly initialized */
