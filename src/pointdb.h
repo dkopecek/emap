@@ -1,13 +1,52 @@
 #ifndef POINTDB_H
 #define POINTDB_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "emap.h"
 
 typedef struct {
-        emap_float y;   /**< dependent variable */
-        emap_float x[]; /**< inline array of independent variables */
+        uint32_t   flags; /**< flags */
+        emap_float y;     /**< dependent variable */
+        emap_float x[];   /**< inline array of independent variables */
 } emap_point_t;
+
+#define EMAP_POINT_VISITED   0x00000001
+#define EMAP_POINT_MINIMUM_L 0x00000010
+#define EMAP_POINT_MINIMUM_G 0x00000020
+
+/**
+ * Atomically set flag `f' on point `p'.
+ * @return true if the flag was set by this operation, false if the flag was already set
+ */
+static inline bool emap_point_setflag(emap_point_t *p, uint32_t f)
+{
+        register uint32_t o;
+#ifndef NDEBUG
+        /* Check that only one flag is being set */
+        register uint32_t i, c;
+        for (i = f, c = 0; i > 0; i>>=1)
+                if (f & 1) ++c;
+#endif
+        o = __sych_fetch_and_or(&p->flags, f);
+
+        return (o & f ? false : true);
+}
+
+/**
+ * Atomically read flag `f' from point `p'.
+ * @return true if the flag is set, false otherwise
+ */
+static inline bool emap_point_getflag(emap_point_t *p, uint32_t f)
+{
+#ifndef NDEBUG
+        /* Check that only one flag is being read */
+        register uint32_t i, c;
+        for (i = f, c = 0; i > 0; i>>=1)
+                if (f & 1) ++c;
+#endif
+        return (bool)(__sync_fetch_and_add(&p->flags, 0) & f);
+}
 
 #define EMAP_POINT_SIZE(arity) (sizeof(emap_point_t) + (sizeof(emap_float) * (arity)))
 
@@ -56,5 +95,8 @@ emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb);
 void emap_pointdb_free(emap_pointdb_t *pdb);
 int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const char *c_chars);
 int emap_pointdb_sort(emap_pointdb_t *pdb);
+
+void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *));
+bool emap_pointnb_apply(emap_pointdb_t *pdb, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *));
 
 #endif /* POINTDB_H */

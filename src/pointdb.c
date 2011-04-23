@@ -407,3 +407,31 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
 #endif
         return (EMAP_SUCCESS);
 }
+
+void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *))
+{
+        register int i;
+
+        EMAP_PDB_INITIALIZED(pdb);
+        EMAP_PDB_LOADED(pdb);
+        EMAP_PDB_SORTED(pdb);
+
+#pragma omp parallel for
+        for (i = 0; i < pdb->count; ++i)
+                fn(pdb, emap_pointp(pdb, i));
+
+        return;
+}
+
+/**
+ * Apply a predicate function `fn' on the neighbors of `p'.
+ * @return true if the predicate holds for all neighbors
+ */
+bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *))
+{
+        EMAP_PDB_INITIALIZED(pdb);
+        EMAP_PDB_LOADED(pdb);
+        EMAP_PDB_SORTED(pdb);
+
+        return (false);
+}
