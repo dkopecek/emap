@@ -12,7 +12,7 @@ AM_INIT_AUTOMAKE([foreign tar-pax])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
-CFLAGS="$CFLAGS -O0 -g"
+CFLAGS="$CFLAGS -O0 -g -fstack-protector -fstack-check"
 
 # Checks for programs.
 AC_PROG_CC

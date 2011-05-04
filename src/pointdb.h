@@ -8,7 +8,7 @@
 typedef struct {
         uint32_t   flags; /**< flags */
         emap_float y;     /**< dependent variable */
-        emap_float x[];   /**< inline array of independent variables */
+        emap_float x[];   /**< inline array of independent vari`ables */
 } emap_point_t;
 
 #define EMAP_POINT_VISITED   0x00000001
@@ -28,7 +28,7 @@ static inline bool emap_point_setflag(emap_point_t *p, uint32_t f)
         for (i = f, c = 0; i > 0; i>>=1)
                 if (f & 1) ++c;
 #endif
-        o = __sych_fetch_and_or(&p->flags, f);
+        o = __sync_fetch_and_or(&p->flags, f);
 
         return (o & f ? false : true);
 }

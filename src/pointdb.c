@@ -421,6 +421,22 @@ void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_p
                 fn(pdb, emap_pointp(pdb, i));
 
         return;
+ }
+
+struct bs_helper {
+        emap_float k;
+        int        n;
+};
+
+static int bs_psort_cmp(struct bs_helper *h, emap_point_t **p)
+{
+        emap_float d = h->k - (*p)->x[h->n];
+        if (d > 0)
+                return 1;
+        if (d < 0)
+                return -1;
+        else
+                return 0;
 }
 
 /**
@@ -433,5 +449,45 @@ bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_p
         EMAP_PDB_LOADED(pdb);
         EMAP_PDB_SORTED(pdb);
 
-        return (false);
+        /*
+         * test all neighbors with `fn'
+         * For all x from p->x, run fn
+         * on x-1, x+1, etc, ...
+         *
+         * Number of neighbors should be 3^n - 1
+         */
+
+        struct bs_helper bsh;
+        emap_point_t **cur_x;
+        register int xi, xn, gi;
+        register bool res = true;
+
+        for (xn = 0; xn < pdb->arity; ++xn) {
+                /* find current x's `gi' from p->x[xn] */
+                bsh.k = p->x[xn];
+                bsh.n = xn;
+                cur_x = bsearch(&bsh, pdb->psort + (xn * pdb->count), pdb->count,
+                                sizeof(emap_point_t *),
+                                (int(*)(const void *, const void *))bs_psort_cmp);
+
+                assert(cur_x != NULL);
+                assert((*cur_x)->x[xn] == p->x[xn]);
+
+                gi = ((size_t)cur_x - (size_t)(pdb->psort + (xn * pdb->count))) / sizeof(emap_point_t *);
+
+                if (gi > 0 && gi < (pdb->count - 1)) {
+                        for(xi = -1; xi <= 1; ++xi) {
+                                res = res && fn(pdb, p, emap_psortp(pdb, xn, gi + xi));
+                                if (!res)
+                                        return (false);
+                        }
+                } else {
+#ifndef NDEBUG
+                        fprintf(stderr, "DEBUG: `gi' out of applicable range: %u\n", gi);
+#endif
+                        return (false);
+                }
+        }
+
+        return (res);
 }

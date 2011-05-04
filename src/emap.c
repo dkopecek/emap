@@ -8,6 +8,9 @@
 
 #define EMAP_SHORT_OPTIONS "c:e:o:hv"
 
+static bool local_minimum_p(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n);
+static void collect_minima(emap_pointdb_t *pdb, emap_point_t *p);
+
 static void fprintu(FILE *stream, char *arg0)
 {
         fprintf(stream, "\n");
@@ -97,6 +100,7 @@ int main(int argc, char *argv[])
                 return (EXIT_FAILURE);
         }
 
+        emap_pointdb_apply(&pdb, collect_minima);
         emap_pointdb_free(&pdb);
 
         if (path_in != NULL)
@@ -107,4 +111,25 @@ int main(int argc, char *argv[])
         free(opt_comment);
 
         return (EXIT_SUCCESS);
+}
+
+static bool local_minimum_p(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n)
+{
+        return (p->y <= n->y ? true : false);
+}
+
+static void collect_minima(emap_pointdb_t *pdb, emap_point_t *p)
+{
+        bool local_minimum;
+
+        local_minimum = emap_pointnb_applyp(pdb, p, local_minimum_p);
+#ifndef NDEBUG
+        if (local_minimum) {
+                int n;
+                fprintf(stderr, "DEBUG: found local minimum y=%f at (", p->y);
+                for (n = 0; n < pdb->arity; ++n)
+                        fprintf(stderr, "%f ", p->x[n]);
+                fprintf(stderr, ")\n");
+        }
+#endif
 }
