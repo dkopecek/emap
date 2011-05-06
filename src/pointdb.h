@@ -7,6 +7,7 @@
 
 typedef struct {
         uint32_t   flags; /**< flags */
+        uint32_t  *ptkey; /**< point key */
         emap_float y;     /**< dependent variable */
         emap_float x[];   /**< inline array of independent vari`ables */
 } emap_point_t;
@@ -94,7 +95,7 @@ static inline emap_point_t *emap_psortp(emap_pointdb_t *pdb, size_t xn, size_t x
 emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb);
 void emap_pointdb_free(emap_pointdb_t *pdb);
 int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const char *c_chars);
-int emap_pointdb_sort(emap_pointdb_t *pdb);
+int emap_pointdb_index(emap_pointdb_t *pdb);
 
 void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *));
 bool emap_pointnb_apply(emap_pointdb_t *pdb, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *));

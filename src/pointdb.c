@@ -174,9 +174,11 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
                         errno   = 0;
 
                         /* convert string token to float/double */
-                        if (gi == y_n)
+                        if (gi == y_n) {
                                 emap_pointp(pdb, pi)->y     = res = emap_strtoflt(tok[gi], &toksave);
-                        else {
+                                emap_pointp(pdb, pi)->flags = 0;
+                                emap_pointp(pdb, pi)->ptkey = malloc(sizeof(uint32_t) * pdb->arity);
+                        } else {
                                 emap_pointp(pdb, pi)->x[xi] = res = emap_strtoflt(tok[gi], &toksave);
                                 ++xi;
                         }
@@ -320,9 +322,9 @@ static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b)
 #endif
 }
 
-int emap_pointdb_sort(emap_pointdb_t *pdb)
+int emap_pointdb_index(emap_pointdb_t *pdb)
 {
-        register int i;
+        register int i, x, k;
 
         if (pdb == NULL)
                 return (EMAP_EFAULT);
@@ -384,7 +386,6 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
 #ifndef NDEBUG
         {
                 emap_float prev;
-                int x;
                 /*
                  * Check that everything is sorted properly
                  */
@@ -405,6 +406,20 @@ int emap_pointdb_sort(emap_pointdb_t *pdb)
                 }
         }
 #endif
+
+        /*
+         * Walk thru all psort arrays and get the key segments (index of each variable)
+         */
+        for (x = 0; x < pdb->arity; ++x) {
+                emap_psortp(pdb, x, 0)->ptkey[x] = k = 0;
+
+                for(i = 1; i < pdb->count; ++i) {
+                        if (emap_psortp(pdb, x, i - 1)->x[x] != emap_psortp(pdb, x, i)->x[x])
+                                ++k;
+                        emap_psortp(pdb, x, i - 1)->ptkey[x] = k;
+                }
+        }
+
         return (EMAP_SUCCESS);
 }
 

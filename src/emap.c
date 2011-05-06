@@ -93,10 +93,10 @@ int main(int argc, char *argv[])
                 return (EXIT_FAILURE);
         }
 
-        ret = emap_pointdb_sort(&pdb);
+        ret = emap_pointdb_index(&pdb);
 
         if (ret != EMAP_SUCCESS) {
-                fprintf(stderr, "Unable to sort data points from \"%s\": ret=%d\n", path_in, ret);
+                fprintf(stderr, "Unable to index the data points from \"%s\": ret=%d\n", path_in, ret);
                 return (EXIT_FAILURE);
         }
 
