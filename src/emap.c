@@ -6,7 +6,7 @@
 #include "emap.h"
 #include "pointdb.h"
 
-#define EMAP_SHORT_OPTIONS "c:e:o:hv"
+#define EMAP_SHORT_OPTIONS "c:y:o:E:hv"
 
 static bool local_minimum_p(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n);
 static void collect_minima(emap_pointdb_t *pdb, emap_point_t *p);
@@ -17,11 +17,12 @@ static void fprintu(FILE *stream, char *arg0)
         fprintf(stream, " Usage: %s [OPTIONS] <input>\n", basename(arg0));
         fprintf(stream, "\n");
         fprintf(stream, "\t-o <file>      Output file or `-' for stdout (default is stdout).\n\n");
-        fprintf(stream, "\t-e <n>         Column number representing the dependent variable:\n");
+        fprintf(stream, "\t-y <n>         Column number representing the dependent variable:\n");
         fprintf(stream, "\t                  0 ... last column (default)\n");
         fprintf(stream, "\t                  n ... n-th column (max. %u)\n\n", (1<<16) - 1);
-        fprintf(stream, "\t-c <str>       Comment characters (lines starting wich such\n");
-        fprintf(stream, "\t               character will be skipped; default is \"%s\").\n\n", EMAP_COMMENT_CHARS);
+        fprintf(stream, "\t-E <n>[,...]   Exclude n-th column. Multiple columns may be specified.\n\n");
+        fprintf(stream, "\t-c <str>       Comment characters (lines starting wich such characters\n");
+        fprintf(stream, "\t               will be skipped; default is \"%s\").\n\n", EMAP_COMMENT_CHARS);
         fprintf(stream, "\t-v             Be verbose.\n");
         fprintf(stream, "\t-h             This help.\n");
         fprintf(stream, "\n");
@@ -31,12 +32,15 @@ int opt_verbose = 0;
 
 int main(int argc, char *argv[])
 {
-        char *arg0, *path_in, *path_out;
+        char *arg0, *path_in, *path_out, *tok;
         int   opt, ret;
         int   opt_yn = 0;
         char *opt_comment = strdup(EMAP_COMMENT_CHARS);
 
         emap_pointdb_t pdb;
+
+        uint32_t *skip_x_n = NULL, x_n;
+        size_t    skip_n   = 0;
 
         arg0     = argv[0];
         path_in  = NULL;
@@ -47,15 +51,43 @@ int main(int argc, char *argv[])
                 case 'o':
                         path_out = strdup(optarg);
                         break;
-                case 'e':
+                case 'y':
                         opt_yn = atoi(optarg);
 
                         if (opt_yn < 0 || opt_yn >= 1<<16) {
                                 fprintf(stderr,
-                                        "Invalid value for option `-e': only values from the interval <%u,%u> are allowed\n", 0, (1<<16) - 1);
+                                        "Invalid value for option `-y': only values from the interval <%u,%u> are allowed\n", 0, (1<<16) - 1);
                                 fprintu(stderr, arg0);
                                 return (EXIT_FAILURE);
                         }
+
+                        break;
+                case 'E':
+                        if (skip_x_n != NULL)
+                                free(skip_x_n);
+
+                        skip_n   = 0;
+                        skip_x_n = NULL;
+
+                        tok = strtok(optarg, ",");
+
+                        do {
+                                x_n = atoi(tok);
+
+                                if (x_n <= 0) {
+                                        fprintf(stderr,
+                                                "Invalid value for option `-E': only integers greater than zero are allowed\n");
+                                        fprintu(stderr, arg0);
+
+                                        if (skip_x_n != NULL)
+                                                free(skip_x_n);
+
+                                        return (EXIT_FAILURE);
+                                }
+
+                                skip_x_n = realloc(skip_x_n, sizeof(uint32_t) * ++skip_n);
+                                skip_x_n[skip_n - 1] = x_n - 1;
+                        } while((tok = strtok(NULL, ",")) != NULL);
 
                         break;
                 case 'c':
@@ -86,7 +118,7 @@ int main(int argc, char *argv[])
         path_in = strdup(argv[0]);
 
         emap_pointdb_init(&pdb);
-        ret = emap_pointdb_load(&pdb, path_in, opt_yn, opt_comment);
+        ret = emap_pointdb_load(&pdb, path_in, opt_yn, skip_x_n, skip_n, opt_comment);
 
         if (ret != EMAP_SUCCESS) {
                 fprintf(stderr, "Unable to load data points from \"%s\": ret=%d\n", path_in, ret);

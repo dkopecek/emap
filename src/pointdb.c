@@ -31,18 +31,32 @@ void emap_pointdb_free(emap_pointdb_t *pdb)
                 free(pdb);
 }
 
-int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const char *c_chars)
+static int uint32_cmp(const uint32_t *a, const uint32_t *b)
+{
+        return *a - *b;
+}
+
+int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint32_t skip_x_n[], size_t skip_n, const char *c_chars)
 {
         fpos_t fl_pos;
         FILE  *fp;
         char   line_buffer[EMAP_LINEBUFFER_SIZE], *row, **tok, *toksave;
-        register int i, ts, lines, gi, xi, pi;
+        register int i, ts, lines, xi, pi;
+        int gi;
         emap_float res;
 
         if (pdb == NULL || path == NULL)
                 return (EMAP_EFAULT);
+        if (skip_n > 0 && skip_x_n == NULL)
+                return (EMAP_EINVAL);
 
         EMAP_PDB_INITIALIZED(pdb);
+
+        /*
+         * Sort the skip_x_n array so that after we get the column count
+         * we can sanitize the skip_n value.
+         */
+        qsort(skip_x_n, skip_n, sizeof(uint32_t), (int(*)(const void *, const void *))uint32_cmp);
 
         fp = fopen(path, "r");
 
@@ -139,7 +153,27 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
                 return (EMAP_ESYSTEM);
         }
 
-        pdb->arity = ts - 1;
+        if (y_n == 0)
+                y_n = ts;
+
+        --y_n;
+
+        if (bsearch(&y_n, skip_x_n, skip_n, sizeof(uint32_t),
+                    (int(*)(const void *, const void *))uint32_cmp) != NULL)
+        {
+                /* one of the specified column matches the y column */
+                --skip_n;
+        }
+
+        /*
+         * Update the skip_x_n array size, ignore anything beyond
+         * the number of tokens and ensure that at least one column
+         * will be read as an independend variable.
+         */
+        if (skip_n > ts)
+                skip_n = ts - 2;
+
+        pdb->arity = ts - 1 - skip_n;
         pdb->count = lines;
 
 #ifndef NDEBUG
@@ -154,11 +188,6 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
 
                 return (EMAP_ENOMEM);
         }
-
-        if (y_n == 0)
-                y_n = ts - 1;
-        else
-                --y_n;
 
 #ifndef NDEBUG
         fprintf(stderr, "DEBUG: y_n = %u\n", y_n);
@@ -179,8 +208,12 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, const
                                 emap_pointp(pdb, pi)->flags = 0;
                                 emap_pointp(pdb, pi)->ptkey = malloc(sizeof(uint32_t) * pdb->arity);
                         } else {
-                                emap_pointp(pdb, pi)->x[xi] = res = emap_strtoflt(tok[gi], &toksave);
-                                ++xi;
+                                if (bsearch(&gi, skip_x_n, skip_n, sizeof(uint32_t),
+                                            (int(*)(const void *, const void *))uint32_cmp) == NULL)
+                                        {
+                                                emap_pointp(pdb, pi)->x[xi] = res = emap_strtoflt(tok[gi], &toksave);
+                                                ++xi;
+                                        }
                         }
 
 #if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
@@ -406,7 +439,6 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
                 }
         }
 #endif
-
         /*
          * Walk thru all psort arrays and get the key segments (index of each variable)
          */
@@ -418,6 +450,9 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
                                 ++k;
                         emap_psortp(pdb, x, i - 1)->ptkey[x] = k;
                 }
+#ifndef NDEBUG
+                fprintf(stderr, "DEBUG: highest index for psort(%p, %d) is %d\n", pdb, x, k);
+#endif
         }
 
         return (EMAP_SUCCESS);
