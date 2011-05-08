@@ -5,7 +5,9 @@
 #include <stdint.h>
 #include <errno.h>
 #include "emap.h"
+#include "helpers.h"
 #include "pointdb.h"
+#include "rbt_u32mem.h"
 
 emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb)
 {
@@ -17,6 +19,7 @@ emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb)
         pdb->count = 0;
         pdb->point = NULL;
         pdb->psort = NULL;
+        pdb->pindex = NULL;
 
         return (pdb);
 }
@@ -219,7 +222,6 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
 #if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
                         fprintf(stderr, "\"%s\" => %"EMAP_FLTFMT"| ", tok[gi], res);
 #endif
-
                         /* error check */
                         if ((res == 0 && toksave == tok[gi]) || errno == ERANGE) {
 #ifndef NDEBUG
@@ -310,49 +312,29 @@ _done:
 
 static int _pointcmp_stage1(const emap_point_t *a, const emap_point_t *b)
 {
-        emap_float d = a->y - b->y;
-
 #if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
         fprintf(stderr, "%"EMAP_FLTFMT" - %"EMAP_FLTFMT"\n", a->y, b->y);
 #endif
-        if (d < 0)
-                return -1;
-        if (d > 0)
+        if (a->y > b->y)
                 return 1;
+        if (a->y < b->y)
+                return -1;
         else
                 return 0;
-#if 0
-        if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
-                return 0;
-        if (d > 0)
-                return 1;
-        else
-                return -1;
-#endif
 }
 
 static int _pointcmp_stage2_x = -1;
 
 static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b)
 {
-        emap_float d = (*a)->x[_pointcmp_stage2_x] - (*b)->x[_pointcmp_stage2_x];
-
         assert(_pointcmp_stage2_x != -1);
 
-        if (d < 0)
-                return -1;
-        if (d > 0)
+        if ((*a)->x[_pointcmp_stage2_x] > (*b)->x[_pointcmp_stage2_x])
                 return 1;
+        if ((*a)->x[_pointcmp_stage2_x] < (*b)->x[_pointcmp_stage2_x])
+                return -1;
         else
                 return 0;
-#if 0
-        if (emap_float_abs(d) <= EMAP_FLTCMP_DELTA)
-                return 0;
-        if (d > 0)
-                return 1;
-        else
-                return -1;
-#endif
 }
 
 int emap_pointdb_index(emap_pointdb_t *pdb)
@@ -446,13 +428,40 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
                 emap_psortp(pdb, x, 0)->ptkey[x] = k = 0;
 
                 for(i = 1; i < pdb->count; ++i) {
-                        if (emap_psortp(pdb, x, i - 1)->x[x] != emap_psortp(pdb, x, i)->x[x])
+                        if (emap_psortp(pdb, x, i - 1)->x[x] < emap_psortp(pdb, x, i)->x[x])
                                 ++k;
-                        emap_psortp(pdb, x, i - 1)->ptkey[x] = k;
+                        else if (emap_psortp(pdb, x, i - 1)->x[x] > emap_psortp(pdb, x, i)->x[x])
+                                ++k;
+
+                        emap_psortp(pdb, x, i)->ptkey[x] = k;
                 }
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: highest index for psort(%p, %d) is %d\n", pdb, x, k);
 #endif
+        }
+
+        if (pdb->pindex != NULL)
+                rbt_u32mem_free(pdb->pindex);
+
+        pdb->pindex = rbt_u32mem_new();
+
+        for (i = 0; i < pdb->count; ++i) {
+                if (rbt_u32mem_add(pdb->pindex,
+                                   emap_pointp(pdb, i)->ptkey, pdb->arity, emap_pointp(pdb, i)) != 0)
+                {
+                        int a;
+
+                        fprintf(stderr, "DEBUG: rbt_u32mem_add(%p, %p, %u, %p) failed: i=%u\n",
+                                pdb->pindex, emap_pointp(pdb, i)->ptkey, pdb->arity, emap_pointp(pdb, i), i);
+                        fprintf(stderr, "ERROR: there seems to be more than one occurence of the independent variable vector ");
+
+                        fprintf(stderr, "(");
+                        for (a = 0; a < pdb->arity - 1; ++a)
+                                fprintf(stderr, "%f ", emap_pointp(pdb, i)->x[a]);
+                        fprintf(stderr, "%f)\n", emap_pointp(pdb, i)->x[a]);
+
+                        return (EMAP_EUNKNOWN);
+                }
         }
 
         return (EMAP_SUCCESS);
@@ -480,13 +489,24 @@ struct bs_helper {
 
 static int bs_psort_cmp(struct bs_helper *h, emap_point_t **p)
 {
-        emap_float d = h->k - (*p)->x[h->n];
-        if (d > 0)
+        if (h->k > (*p)->x[h->n])
                 return 1;
-        if (d < 0)
+        if (h->k < (*p)->x[h->n])
                 return -1;
         else
                 return 0;
+}
+
+static uint64_t three_to_n(int n)
+{
+        uint64_t r = 1;
+
+        while (n > 0) {
+                r *= 3;
+                --n;
+        }
+
+        return (r);
 }
 
 /**
@@ -495,49 +515,110 @@ static int bs_psort_cmp(struct bs_helper *h, emap_point_t **p)
  */
 bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *))
 {
+        /*
+         * Number of neighbors should be 3^n - 1
+         */
+        bool      res = true;
+        int32_t   d[3] = { 0, -1, 1 };
+        uint32_t *d_key, *n_key;
+        uint64_t  n, n_max;
+        int i;
+        emap_point_t *n_point = NULL;
+
         EMAP_PDB_INITIALIZED(pdb);
         EMAP_PDB_LOADED(pdb);
         EMAP_PDB_SORTED(pdb);
 
-        /*
-         * test all neighbors with `fn'
-         * For all x from p->x, run fn
-         * on x-1, x+1, etc, ...
-         *
-         * Number of neighbors should be 3^n - 1
-         */
+        d_key = alloc_array(uint32_t, pdb->arity);
+        n_key = alloc_array(uint32_t, pdb->arity);
+        n_max = three_to_n(pdb->arity);
 
-        struct bs_helper bsh;
-        emap_point_t **cur_x;
-        register int xi, xn, gi;
-        register bool res = true;
+        /* Initialize neighbor key delta */
+        for (i = 1; i < pdb->arity; ++i)
+                d_key[i] = 0;
 
-        for (xn = 0; xn < pdb->arity; ++xn) {
-                /* find current x's `gi' from p->x[xn] */
-                bsh.k = p->x[xn];
-                bsh.n = xn;
-                cur_x = bsearch(&bsh, pdb->psort + (xn * pdb->count), pdb->count,
-                                sizeof(emap_point_t *),
-                                (int(*)(const void *, const void *))bs_psort_cmp);
+        /* Skip (0, 0, ..., 0) */
+        d_key[0] = 1;
+        n        = 1;
+        goto __first;
 
-                assert(cur_x != NULL);
-                assert((*cur_x)->x[xn] == p->x[xn]);
+        for (;;) {
+                while (d_key[0] < 3) {
+                __first:
+                        /*
+                         * p_key + d_key = n_key
+                         */
+                        for (i = 0; i < pdb->arity; ++i)
+                                n_key[i] = p->ptkey[i] + d[d_key[i]];
 
-                gi = ((size_t)cur_x - (size_t)(pdb->psort + (xn * pdb->count))) / sizeof(emap_point_t *);
+                        /*
+                         * look for the point with key `n_key' in the point index
+                         */
+                        if (rbt_u32mem_get(pdb->pindex, n_key, pdb->arity, (void **)&n_point) != 0) {
+                                int a;
 
-                if (gi > 0 && gi < (pdb->count - 1)) {
-                        for(xi = -1; xi <= 1; ++xi) {
-                                res = res && fn(pdb, p, emap_psortp(pdb, xn, gi + xi));
-                                if (!res)
-                                        return (false);
+                                fprintf(stderr, "ERROR: can't find neighboring point: p=(");
+
+                                /* p */
+                                for (a = 0; a < pdb->arity - 1; ++a)
+                                        fprintf(stderr, "%u ", p->ptkey[a]);
+                                fprintf(stderr, "%u), d=(", p->ptkey[a]);
+
+                                /* n */
+                                for (a = 0; a < pdb->arity - 1; ++a)
+                                        fprintf(stderr, "%d ", d[d_key[a]]);
+                                fprintf(stderr, "%d)\n", d[d_key[a]]);
+
+                                res = false;
+                                goto __ret;
                         }
-                } else {
+
 #ifndef NDEBUG
-                        fprintf(stderr, "DEBUG: `gi' out of applicable range: %u\n", gi);
+                        if (p == n_point) {
+                                int a;
+                                fprintf(stderr, "DEBUG: p == n_point, d=(");
+                                /* n */
+                                for (a = 0; a < pdb->arity - 1; ++a)
+                                        fprintf(stderr, "%u ", d[d_key[a]]);
+                                fprintf(stderr, "%u)\n", d[d_key[a]]);
+                        }
+
+                        assert(p != n_point);
 #endif
-                        return (false);
+                        res = res && fn(pdb, p, n_point);
+
+                        if (!res || ++n == n_max) {
+#ifndef NDEBUG
+                                fprintf(stderr, "DEBUG: res=%s, n = %u\n", res ? "true" : "false", n);
+#endif
+                                goto __ret;
+                        }
+
+                        d_key[0] += 1;
                 }
+
+                i = 0;
+
+                do {
+                        d_key[i] = 0;
+                        assert(i < pdb->arity);
+
+                        ++i;
+                        d_key[i] += 1;
+#ifndef NDEBUG
+                        int a;
+                        fprintf(stderr, "DEBUG: d=(");
+                        /* n */
+                        for (a = 0; a < pdb->arity - 1; ++a)
+                                fprintf(stderr, "%d ", d[d_key[a]]);
+                        fprintf(stderr, "%d)\n", d[d_key[a]]);
+#endif
+                } while(d_key[i] == 3);
         }
+
+__ret:
+        free(n_key);
+        free(d_key);
 
         return (res);
 }
