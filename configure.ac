@@ -12,7 +12,16 @@ AM_INIT_AUTOMAKE([foreign tar-pax])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
-CFLAGS="$CFLAGS -O0 -g -fstack-protector -fstack-check"
+CFLAGS="$CFLAGS -pipe -std=c99 -W -Wall -Wnonnull -Wno-unknown-pragmas -D_GNU_SOURCE"
+
+CFLAGS_DEBUGGING="-fno-inline-functions -O0 -g3 -fstack-protector -fstack-check"
+CFLAGS_OPTIMIZED="-O2 -fomit-frame-pointer -DNDEBUG"
+
+# Some parts of the code pass small integer values thru a pointer
+# argument, so all warnings muted by the options specified bellow
+# are expected. These options aren't used if the sources are
+# ./configured with `--enable-debug'.
+CFLAGS_NONDEBUG="-Wno-pointer-to-int-cast -Wno-int-to-pointer-cast"
 
 # Checks for programs.
 AC_PROG_CC
@@ -26,9 +35,25 @@ AC_CHECK_HEADERS([stdlib.h])
 
 # Checks for library functions.
 
+AC_ARG_ENABLE([debug],
+     [AC_HELP_STRING([--enable-debug], [enable debugging flags (default=no)])],
+     [case "${enableval}" in
+       yes) debug=yes ;;
+       no)  debug=no ;;
+       *) AC_MSG_ERROR([bad value ${enableval} for --enable-debug]) ;;
+     esac], [debug=no])
+
+if test "$debug" = "yes"; then
+   CFLAGS="$CFLAGS $CFLAGS_DEBUGGING"
+else
+   CFLAGS="$CFLAGS $CFLAGS_NONDEBUG $CFLAGS_OPTIMIZED"
+fi
+
 AC_CONFIG_FILES([Makefile
                  doc/Makefile
                  src/Makefile
                  tests/Makefile])
 
 AC_OUTPUT
+
+echo "CFLAGS: $CFLAGS"
