@@ -98,6 +98,7 @@ int main(int argc, char *argv[])
                         return (EXIT_SUCCESS);
                 case 'v':
                         opt_verbose = 1;
+                        setbuf(stdout, NULL);
                         break;
                 default:
                         fprintf(stderr, "Unknown option `%c'\n", optopt);
@@ -118,18 +119,44 @@ int main(int argc, char *argv[])
         path_in = strdup(argv[0]);
 
         emap_pointdb_init(&pdb);
+
+        if (opt_verbose) {
+#ifdef _OPENMP
+                printf("[i] Compiled with OpenMP support\n");
+#endif
+                printf("[i] Loading data points from \"%s\"... ", path_in);
+        }
+
         ret = emap_pointdb_load(&pdb, path_in, opt_yn, skip_x_n, skip_n, opt_comment);
 
         if (ret != EMAP_SUCCESS) {
+                if (opt_verbose)
+                        fprintf(stdout, "FAILED\n");
                 fprintf(stderr, "Unable to load data points from \"%s\": ret=%d\n", path_in, ret);
                 return (EXIT_FAILURE);
+        }
+
+        if (opt_verbose) {
+                printf("OK\n");
+                printf("[i] Loaded %u data points, # of independent variables is %u\n", pdb.count, pdb.arity);
+                printf("[i] Generating index... ");
         }
 
         ret = emap_pointdb_index(&pdb);
 
         if (ret != EMAP_SUCCESS) {
+                if (opt_verbose)
+                        fprintf(stdout, "FAIL\n");
                 fprintf(stderr, "Unable to index the data points from \"%s\": ret=%d\n", path_in, ret);
                 return (EXIT_FAILURE);
+        }
+
+        if (opt_verbose) {
+                int a;
+                printf("OK\n");
+                printf("[i] Key component boundaries:\n");
+                for (a = 0; a < pdb.arity; ++a)
+                        printf("    x[%u] ... <0,%u>\n", a, pdb.keymax[a]);
         }
 
         emap_pointdb_apply(&pdb, collect_minima);
