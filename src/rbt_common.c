@@ -153,10 +153,10 @@ void rbt_wunlock(rbt_t *rbt)
         return;
 }
 #else
-int  rbt_rlock(rbt_t *rbt) { return(0); }
-void rbt_runlock(rbt_t *rbt) { return; }
-int  rbt_wlock(rbt_t *rbt) { return(0); }
-void rbt_wunlock(rbt_t *rbt) { return; }
+int  rbt_rlock(rbt_t *rbt) { (void)rbt; return(0); }
+void rbt_runlock(rbt_t *rbt) { (void)rbt; return; }
+int  rbt_wlock(rbt_t *rbt) { (void)rbt; return(0); }
+void rbt_wunlock(rbt_t *rbt) { (void)rbt; return; }
 #endif /* RBT_IMPLICIT_LOCKING */
 
 /*

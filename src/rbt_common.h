@@ -47,7 +47,7 @@ typedef enum {
  */
 struct rbt_node {
         struct rbt_node *_chld[2];
-        uint8_t          _node[];
+        void            *_node[];
 };
 
 #define RBT_NODE_CB 0
@@ -55,7 +55,7 @@ struct rbt_node {
 #define RBT_NODE_SL 0
 #define RBT_NODE_SR 1
 
-#define rbt_node_ptr(np) ((struct rbt_node *)((uintptr_t)(np)&(UINTPTR_MAX << 1)))
+#define rbt_node_ptr(np) ((struct rbt_node *)(((uintptr_t)(np))&(UINTPTR_MAX << 1)))
 #define rbt_node_setptr(dst,src) (dst) = (struct rbt_node *)((uintptr_t)rbt_node_ptr(src)|((uintptr_t)(dst)&1))
 
 #define rbt_node_setcolor(np, cb)                                       \

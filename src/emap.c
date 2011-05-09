@@ -4,12 +4,13 @@
 #include <unistd.h>
 #include <libgen.h>
 #include "emap.h"
+#include "helpers.h"
 #include "pointdb.h"
 
 #define EMAP_SHORT_OPTIONS "c:y:o:E:hv"
 
-static bool local_minimum_p(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n);
-static void collect_minima(emap_pointdb_t *pdb, emap_point_t *p);
+static uint32_t is_POI(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n);
+static void     collect_POI(emap_pointdb_t *pdb, emap_point_t *p, void *arg);
 
 static void fprintu(FILE *stream, char *arg0)
 {
@@ -38,6 +39,7 @@ int main(int argc, char *argv[])
         char *opt_comment = strdup(EMAP_COMMENT_CHARS);
 
         emap_pointdb_t pdb;
+        POIdb_t        POIdb;
 
         uint32_t *skip_x_n = NULL, x_n;
         size_t    skip_n   = 0;
@@ -138,7 +140,7 @@ int main(int argc, char *argv[])
 
         if (opt_verbose) {
                 printf("OK\n");
-                printf("[i] Loaded %u data points, # of independent variables is %u\n", pdb.count, pdb.arity);
+                printf("[i] Loaded %zu data points, # of independent variables is %u\n", pdb.count, pdb.arity);
                 printf("[i] Generating index... ");
         }
 
@@ -159,9 +161,46 @@ int main(int argc, char *argv[])
                         printf("    x[%u] ... <0,%u>\n", a, pdb.keymax[a]);
         }
 
-        emap_pointdb_apply(&pdb, collect_minima);
+#ifdef _OPENMP
+        if (pthread_mutex_init(&POIdb.mutex, NULL) != 0) {
+                fprintf(stderr, "ERROR: pthread_mutex_init failed\n");
+                return (EXIT_FAILURE);
+        }
+#endif
+        POIdb.cntinc = sysconf(_SC_PAGESIZE) / sizeof(emap_point_t *);
+
+        POIdb.palloc = POIdb.cntinc;
+        POIdb.pcount = 0;
+        POIdb.points = alloc_array(emap_point_t *, POIdb.palloc);
+
+        POIdb.minima = NULL;
+        POIdb.mcount = 0;
+
+        POIdb.transp = NULL;
+        POIdb.tcount = 0;
+
+        emap_pointdb_apply_r(&pdb, collect_POI, &POIdb);
+
+        if (opt_verbose) {
+                printf("[i] Found %zu POIs\n"
+                       "       local minima: %zu\n"
+                       "  transition points: %zu\n"
+                       "            overlap: %s\n",
+                       POIdb.pcount, POIdb.mcount, POIdb.tcount,
+                       POIdb.tcount + POIdb.mcount > POIdb.pcount ? "yes" : "no");
+        }
+
+        /*
+         * Cleanup & exit
+         */
         emap_pointdb_free(&pdb);
 
+#ifdef _OPENMP
+        if (pthread_mutex_destroy(&POIdb.mutex) != 0) {
+                fprintf(stderr, "ERROR: pthread_mutex_destroy failed\n");
+                return (EXIT_FAILURE);
+        }
+#endif
         if (path_in != NULL)
                 free(path_in);
         if (path_out != NULL)
@@ -172,23 +211,48 @@ int main(int argc, char *argv[])
         return (EXIT_SUCCESS);
 }
 
-static bool local_minimum_p(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n)
+static uint32_t is_POI(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n)
 {
-        return (p->y <= n->y ? true : false);
+        (void)pdb;
+
+        if (p->y < n->y)
+                return POI_FLAG_MINIMUM;
+        if (p->y > n->y)
+                return POI_FLAG_TRANSITION;
+        else
+                return POI_FLAG_MINIMUM|POI_FLAG_TRANSITION;
 }
 
-static void collect_minima(emap_pointdb_t *pdb, emap_point_t *p)
+static void collect_POI(emap_pointdb_t *pdb, emap_point_t *p, void *arg)
 {
-        bool local_minimum;
+        register POIdb_t *POIdb = (POIdb_t *)arg;
+        register uint32_t POI;
 
-        local_minimum = emap_pointnb_applyp(pdb, p, local_minimum_p);
-#ifndef NDEBUG
-        if (local_minimum) {
-                int n;
-                fprintf(stderr, "DEBUG: found local minimum y=%f at (", p->y);
-                for (n = 0; n < pdb->arity; ++n)
-                        fprintf(stderr, "%f ", p->x[n]);
-                fprintf(stderr, ")\n");
-        }
+        POI = emap_pointnb_applyp(pdb, p, is_POI);
+
+        if (POI != 0) {
+#ifdef _OPENMP
+                if (__predict(pthread_mutex_lock(&POIdb->mutex) != 0, 0))
+                        abort();
 #endif
+                /* realloc the POI array if needed */
+                if (__predict(POIdb->palloc == POIdb->pcount, 0)) {
+                        POIdb->palloc += POIdb->cntinc;
+                        POIdb->points  = realloc_array(POIdb->points, emap_point_t *, POIdb->palloc);
+
+                        if (POIdb->points == NULL)
+                                abort();
+                }
+
+                POIdb->points[POIdb->pcount++] = p;
+
+                if (POI & POI_FLAG_MINIMUM)
+                        ++POIdb->mcount;
+                if (POI & POI_FLAG_TRANSITION)
+                        ++POIdb->tcount;
+#ifdef _OPENMP
+                if (__predict(pthread_mutex_unlock(&POIdb->mutex) != 0, 0))
+                        abort();
+#endif
+        }
 }

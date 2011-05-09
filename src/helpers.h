@@ -16,7 +16,10 @@
  * Allocate an array of variables of type `T'.
  */
 #define alloc_array(T, count)                   \
-        ((T *) malloc(sizeof(T) * count))
+        ((T *) malloc(sizeof(T) * (count)))
+
+#define realloc_array(ptr, T, count)            \
+        ((T *) realloc(ptr, sizeof(T) * (count)))
 
 #define __lsym(s) s ## __LINE__
 
@@ -30,6 +33,12 @@
  */
 #define errno_protect \
         for(int __lsym(errno) = errno, __lsym(exec) = 1; __lsym(exec) == 1; __lsym(exec) = 0, errno = __lsym(errno))
+
+#ifdef __GNUC__
+# define __predict(expr, v) __builtin_expect (expr, v)
+#else
+# define __predict(expr, v) expr
+#endif /* __GNUC__ */
 
 /**
  * Output to stderr in debug mode, otherwise do nothing.

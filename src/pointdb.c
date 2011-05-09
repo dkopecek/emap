@@ -45,8 +45,9 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
         fpos_t fl_pos;
         FILE  *fp;
         char   line_buffer[EMAP_LINEBUFFER_SIZE], *row, **tok, *toksave;
-        register int i, ts, lines, xi, pi;
-        int gi;
+        register unsigned int lines, xi, pi;
+        register unsigned int ts, i;
+        unsigned int gi;
         emap_float res;
 
         if (pdb == NULL || path == NULL)
@@ -105,7 +106,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
 #endif
 
         ts  = 8;
-        tok = malloc(sizeof(char *) * ts);
+        tok = alloc_array(char *, ts);
         toksave = NULL;
 
         for (i = 0;; ++i) {
@@ -210,7 +211,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
                         if (gi == y_n) {
                                 emap_pointp(pdb, pi)->y     = res = emap_strtoflt(tok[gi], &toksave);
                                 emap_pointp(pdb, pi)->flags = 0;
-                                emap_pointp(pdb, pi)->ptkey = malloc(sizeof(uint32_t) * pdb->arity);
+                                emap_pointp(pdb, pi)->ptkey = alloc_array(uint32_t, pdb->arity);
                         } else {
                                 if (bsearch(&gi, skip_x_n, skip_n, sizeof(uint32_t),
                                             (int(*)(const void *, const void *))uint32_cmp) == NULL)
@@ -218,6 +219,8 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
                                                 emap_pointp(pdb, pi)->x[xi] = res = emap_strtoflt(tok[gi], &toksave);
                                                 ++xi;
                                         }
+                                else
+                                        continue;
                         }
 
 #if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
@@ -324,15 +327,13 @@ static int _pointcmp_stage1(const emap_point_t *a, const emap_point_t *b)
                 return 0;
 }
 
-static int _pointcmp_stage2_x = -1;
-
-static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b)
+static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b, void *arg)
 {
-        assert(_pointcmp_stage2_x != -1);
+        uint8_t xi = (uint8_t)(arg);
 
-        if ((*a)->x[_pointcmp_stage2_x] > (*b)->x[_pointcmp_stage2_x])
+        if ((*a)->x[xi] > (*b)->x[xi])
                 return 1;
-        if ((*a)->x[_pointcmp_stage2_x] < (*b)->x[_pointcmp_stage2_x])
+        if ((*a)->x[xi] < (*b)->x[xi])
                 return -1;
         else
                 return 0;
@@ -340,7 +341,8 @@ static int _pointcmp_stage2(const emap_point_t **a, const emap_point_t **b)
 
 int emap_pointdb_index(emap_pointdb_t *pdb)
 {
-        register int i, x, k;
+        register unsigned int i, x, k;
+        register uint8_t i8;
 
         if (pdb == NULL)
                 return (EMAP_EFAULT);
@@ -355,7 +357,7 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
         fprintf(stderr, "DEBUG: Allocating %zu MiB of memory for the `psort' array\n",
                 (sizeof(emap_point_t *) * pdb->count * pdb->arity)/(1024*1024));
 #endif
-        pdb->psort = malloc((sizeof(emap_point_t *) * pdb->count) * pdb->arity);
+        pdb->psort = alloc_array(emap_point_t *, pdb->count * pdb->arity);
 
         if (pdb->psort == NULL) {
 #ifndef NDEBUG
@@ -378,25 +380,26 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
         /*
          * prepare psort arrays for sorting
          */
-        for (i = 0; i < pdb->count; ++i)
+        for (i = 0; i < pdb->count; ++i) /* don't parallelize */
                 pdb->psort[i] = emap_pointp(pdb, i);
 
         for (i = 1; i < pdb->arity; ++i)
                 memcpy(pdb->psort + (i * pdb->count), pdb->psort, sizeof(emap_point_t *) * pdb->count);
 
+        assert(sizeof(uint8_t) <= sizeof(void *));
+
         /*
          * sort the psort arrays
          */
-        for (i = 0; i < pdb->arity; ++i) {
-                _pointcmp_stage2_x = i;
+#pragma omp parallel for
+        for (i8 = 0; i8 < pdb->arity; ++i8) {
 #ifndef NDEBUG
-                fprintf(stderr, "DEBUG: Sorting `psort' array %p (x = %u)\n", pdb->psort + (i * pdb->count), i);
+                fprintf(stderr, "DEBUG: Sorting `psort' array %p (x = %u)\n", pdb->psort + (i8 * pdb->count), i8);
 #endif
-                qsort(pdb->psort + (i * pdb->count), pdb->count, sizeof(emap_point_t *),
-                      (int(*)(const void *, const void *))_pointcmp_stage2);
+                qsort_r(pdb->psort + (i8 * pdb->count), pdb->count, sizeof(emap_point_t *),
+                        (int(*)(const void *, const void *, void *))_pointcmp_stage2, (void *)(i8));
         }
 
-        _pointcmp_stage2_x = -1;
         pdb->flags |= EMAP_PDBF_SORT;
 
 #ifndef NDEBUG
@@ -427,6 +430,7 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
          */
         pdb->keymax = alloc_array(uint32_t, pdb->arity);
 
+#pragma omp parallel for private(i, k) /* `x' is private by default */
         for (x = 0; x < pdb->arity; ++x) {
                 emap_psortp(pdb, x, 0)->ptkey[x] = k = 0;
 
@@ -474,7 +478,7 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
 
 void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *))
 {
-        register int i;
+        register size_t i;
 
         EMAP_PDB_INITIALIZED(pdb);
         EMAP_PDB_LOADED(pdb);
@@ -489,7 +493,7 @@ void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_p
 
 void emap_pointdb_apply_r(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *, void *), void *fnarg)
 {
-        register int i;
+        register size_t i;
 
         EMAP_PDB_INITIALIZED(pdb);
         EMAP_PDB_LOADED(pdb);
@@ -500,21 +504,6 @@ void emap_pointdb_apply_r(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap
                 fn(pdb, emap_pointp(pdb, i), fnarg);
 
         return;
- }
-
-struct bs_helper {
-        emap_float k;
-        int        n;
-};
-
-static int bs_psort_cmp(struct bs_helper *h, emap_point_t **p)
-{
-        if (h->k > (*p)->x[h->n])
-                return 1;
-        if (h->k < (*p)->x[h->n])
-                return -1;
-        else
-                return 0;
 }
 
 static uint64_t three_to_n(int n)
@@ -533,22 +522,23 @@ static uint64_t three_to_n(int n)
  * Apply a predicate function `fn' on the neighbors of `p'.
  * @return true if the predicate holds for all neighbors
  */
-bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *))
+uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *))
 {
         /*
          * Number of neighbors should be 3^n - 1
          */
-        bool      res = true;
-        int32_t   d[3] = { 0, -1, 1 };
-        uint32_t *d_key, *n_key;
-        uint64_t  n, n_max;
-        int i;
+        register uint64_t  n, n_max;
+        register uint32_t  res = UINT32_MAX; /* set all bits to 1 */
+        register uint32_t *d_key, *n_key;
+        register int i;
         emap_point_t *n_point = NULL;
+        int32_t d[3] = { 0, -1, 1 };
 
+#ifndef NDEBUG
         EMAP_PDB_INITIALIZED(pdb);
         EMAP_PDB_LOADED(pdb);
         EMAP_PDB_SORTED(pdb);
-
+#endif
         d_key = alloc_array(uint32_t, pdb->arity);
         n_key = alloc_array(uint32_t, pdb->arity);
         n_max = three_to_n(pdb->arity);
@@ -574,7 +564,7 @@ bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_p
                         /*
                          * look for the point with key `n_key' in the point index
                          */
-                        if (rbt_u32mem_get(pdb->pindex, n_key, pdb->arity, (void **)&n_point) != 0) {
+                        if (__predict(rbt_u32mem_get(pdb->pindex, n_key, pdb->arity, (void **)&n_point) != 0, 0)) {
 #ifndef NDEBUG
                                 int a;
                                 fprintf(stderr, "ERROR: can't find neighboring point: p=(");
@@ -589,7 +579,7 @@ bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_p
                                         fprintf(stderr, "%d ", d[d_key[a]]);
                                 fprintf(stderr, "%d)\n", d[d_key[a]]);
 #endif
-                                res = false;
+                                res = 0;
                                 goto __ret;
                         }
 
@@ -605,9 +595,9 @@ bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_p
 
                         assert(p != n_point);
 #endif
-                        res = res && fn(pdb, p, n_point);
+                        res = res & fn(pdb, p, n_point);
 
-                        if (!res || ++n == n_max) {
+                        if (res == 0 || ++n == n_max) {
 #ifndef NDEBUG
                                 fprintf(stderr, "DEBUG: res=%s, n = %u\n", res ? "true" : "false", n);
 #endif

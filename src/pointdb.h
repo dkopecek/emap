@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "emap.h"
+#include "helpers.h"
 #include "rbt_common.h"
 
 typedef struct {
@@ -77,22 +78,22 @@ static inline emap_point_t *emap_psortp(emap_pointdb_t *pdb, size_t xn, size_t x
 #define EMAP_PDBF_LOAD 0x0004 /**< set if some data points were loaded */
 #define EMAP_PDBF_SORT 0x0008 /**< set if the data points are sorted */
 
-#define EMAP_PDB_INITIALIZED(p)                         \
-        do {                                            \
-                if (!((p)->flags & EMAP_PDBF_INIT))     \
-                        abort();                        \
+#define EMAP_PDB_INITIALIZED(p)                                         \
+        do {                                                            \
+                if (__predict(!((p)->flags & EMAP_PDBF_INIT), 0))       \
+                        abort();                                        \
         } while(0)
 
-#define EMAP_PDB_LOADED(p)                              \
-        do {                                            \
-                if (!((p)->flags & EMAP_PDBF_LOAD))     \
-                        abort();                        \
+#define EMAP_PDB_LOADED(p)                                              \
+        do {                                                            \
+                if (__predict(!((p)->flags & EMAP_PDBF_LOAD), 0))       \
+                        abort();                                        \
         } while(0)
 
-#define EMAP_PDB_SORTED(p)                              \
-        do {                                            \
-                if (!((p)->flags & EMAP_PDBF_SORT))     \
-                        abort();                        \
+#define EMAP_PDB_SORTED(p)                                              \
+        do {                                                            \
+                if (__predict(!((p)->flags & EMAP_PDBF_SORT), 0))       \
+                        abort();                                        \
         } while(0)
 
 emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb);
@@ -104,6 +105,6 @@ void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_p
 
 void emap_pointdb_apply_r(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *, void *), void *fnarg);
 
-bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *));
+uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *));
 
 #endif /* POINTDB_H */
