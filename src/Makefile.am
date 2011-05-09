@@ -11,5 +11,5 @@ emap_SOURCES=	emap.c		\
 		rbt_u32mem.c	\
 		rbt_u32mem.h
 
-emap_CFLAGS= -DEMAP_POINT_DOUBLE
+emap_CFLAGS= -DEMAP_POINT_DOUBLE -DRBT_IMPLITIC_LOCKING -fopenmp
 emap_LDFLAGS= -lm
