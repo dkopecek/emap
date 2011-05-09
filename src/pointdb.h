@@ -59,6 +59,7 @@ typedef struct {
         emap_point_t  *point; /**< array of points */
         emap_point_t **psort; /**< array of sorted points by each independent variable */
         rbt_t         *pindex; /**< point index for nearest neighbor search */
+        uint32_t      *keymax; /**< maximum values of each key component */
 } emap_pointdb_t;
 
 static inline emap_point_t *emap_pointp(emap_pointdb_t *pdb, size_t pi)
@@ -100,6 +101,9 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
 int emap_pointdb_index(emap_pointdb_t *pdb);
 
 void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *));
+
+void emap_pointdb_apply_r(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *, void *), void *fnarg);
+
 bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *));
 
 #endif /* POINTDB_H */

@@ -20,6 +20,7 @@ emap_pointdb_t *emap_pointdb_init(emap_pointdb_t *pdb)
         pdb->point = NULL;
         pdb->psort = NULL;
         pdb->pindex = NULL;
+        pdb->keymax = NULL;
 
         return (pdb);
 }
@@ -424,6 +425,8 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
         /*
          * Walk thru all psort arrays and get the key segments (index of each variable)
          */
+        pdb->keymax = alloc_array(uint32_t, pdb->arity);
+
         for (x = 0; x < pdb->arity; ++x) {
                 emap_psortp(pdb, x, 0)->ptkey[x] = k = 0;
 
@@ -435,6 +438,8 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
 
                         emap_psortp(pdb, x, i)->ptkey[x] = k;
                 }
+
+                pdb->keymax[x] = k;
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: highest index for psort(%p, %d) is %d\n", pdb, x, k);
 #endif
@@ -478,6 +483,21 @@ void emap_pointdb_apply(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_p
 #pragma omp parallel for
         for (i = 0; i < pdb->count; ++i)
                 fn(pdb, emap_pointp(pdb, i));
+
+        return;
+ }
+
+void emap_pointdb_apply_r(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap_point_t *, void *), void *fnarg)
+{
+        register int i;
+
+        EMAP_PDB_INITIALIZED(pdb);
+        EMAP_PDB_LOADED(pdb);
+        EMAP_PDB_SORTED(pdb);
+
+#pragma omp parallel for
+        for (i = 0; i < pdb->count; ++i)
+                fn(pdb, emap_pointp(pdb, i), fnarg);
 
         return;
  }
@@ -555,8 +575,8 @@ bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_p
                          * look for the point with key `n_key' in the point index
                          */
                         if (rbt_u32mem_get(pdb->pindex, n_key, pdb->arity, (void **)&n_point) != 0) {
+#ifndef NDEBUG
                                 int a;
-
                                 fprintf(stderr, "ERROR: can't find neighboring point: p=(");
 
                                 /* p */
@@ -568,7 +588,7 @@ bool emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, bool (*fn)(emap_p
                                 for (a = 0; a < pdb->arity - 1; ++a)
                                         fprintf(stderr, "%d ", d[d_key[a]]);
                                 fprintf(stderr, "%d)\n", d[d_key[a]]);
-
+#endif
                                 res = false;
                                 goto __ret;
                         }
