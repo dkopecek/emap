@@ -6,11 +6,11 @@
 #include "emap.h"
 #include "helpers.h"
 #include "pointdb.h"
+#include "POI.h"
+#include "PES.h"
+#include "DG.h"
 
 #define EMAP_SHORT_OPTIONS "c:y:o:E:hv"
-
-static uint32_t is_POI(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n);
-static void     collect_POI(emap_pointdb_t *pdb, emap_point_t *p, void *arg);
 
 static void fprintu(FILE *stream, char *arg0)
 {
@@ -39,7 +39,9 @@ int main(int argc, char *argv[])
         char *opt_comment = strdup(EMAP_COMMENT_CHARS);
 
         emap_pointdb_t pdb;
-        POIdb_t        POIdb;
+        POIdb_t POIdb;
+        DG_t *dg;
+        emap_surface_t *es;
 
         uint32_t *skip_x_n = NULL, x_n;
         size_t    skip_n   = 0;
@@ -190,6 +192,25 @@ int main(int argc, char *argv[])
                        POIdb.tcount + POIdb.mcount > POIdb.pcount ? "yes" : "no");
         }
 
+        es = POI_postprocess(&pdb, &POIdb);
+
+        if (es == NULL) {
+                fprintf(stderr, "ERROR: post-processing of POIs failed\n");
+                return (EXIT_FAILURE);
+        }
+
+        dg = DG_create(es);
+
+        if (dg == NULL) {
+                fprintf(stderr, "ERROR: unable to create a disconnectivity graph from the POI set\n");
+                return (EXIT_FAILURE);
+        }
+
+        if (DG_write(dg, path_out)) {
+                fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out);
+                return (EXIT_FAILURE);
+        }
+
         /*
          * Cleanup & exit
          */
@@ -209,50 +230,4 @@ int main(int argc, char *argv[])
         free(opt_comment);
 
         return (EXIT_SUCCESS);
-}
-
-static uint32_t is_POI(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n)
-{
-        (void)pdb;
-
-        if (p->y < n->y)
-                return POI_FLAG_MINIMUM;
-        if (p->y > n->y)
-                return POI_FLAG_TRANSITION;
-        else
-                return POI_FLAG_MINIMUM|POI_FLAG_TRANSITION;
-}
-
-static void collect_POI(emap_pointdb_t *pdb, emap_point_t *p, void *arg)
-{
-        register POIdb_t *POIdb = (POIdb_t *)arg;
-        register uint32_t POI;
-
-        POI = emap_pointnb_applyp(pdb, p, is_POI);
-
-        if (POI != 0) {
-#ifdef _OPENMP
-                if (__predict(pthread_mutex_lock(&POIdb->mutex) != 0, 0))
-                        abort();
-#endif
-                /* realloc the POI array if needed */
-                if (__predict(POIdb->palloc == POIdb->pcount, 0)) {
-                        POIdb->palloc += POIdb->cntinc;
-                        POIdb->points  = realloc_array(POIdb->points, emap_point_t *, POIdb->palloc);
-
-                        if (POIdb->points == NULL)
-                                abort();
-                }
-
-                POIdb->points[POIdb->pcount++] = p;
-
-                if (POI & POI_FLAG_MINIMUM)
-                        ++POIdb->mcount;
-                if (POI & POI_FLAG_TRANSITION)
-                        ++POIdb->tcount;
-#ifdef _OPENMP
-                if (__predict(pthread_mutex_unlock(&POIdb->mutex) != 0, 0))
-                        abort();
-#endif
-        }
 }

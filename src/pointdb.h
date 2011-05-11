@@ -107,4 +107,7 @@ void emap_pointdb_apply_r(emap_pointdb_t *pdb, void (*fn)(emap_pointdb_t *, emap
 
 uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn)(emap_pointdb_t *, emap_point_t *, emap_point_t *));
 
+int  emap_point_keydistance(const emap_point_t *a, const emap_point_t *b, emap_pointdb_t *pdb);
+bool emap_point_keyneighbor(const emap_point_t *a, const emap_point_t *b, emap_pointdb_t *pdb);
+
 #endif /* POINTDB_H */

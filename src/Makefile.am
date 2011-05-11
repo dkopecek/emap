@@ -9,7 +9,13 @@ emap_SOURCES=	emap.c		\
 		rbt_common.c	\
 		rbt_common.h	\
 		rbt_u32mem.c	\
-		rbt_u32mem.h
+		rbt_u32mem.h	\
+		POI.h		\
+		POI.c		\
+		DG.h		\
+		DG.c		\
+		PES.h		\
+		PES.c
 
 emap_CFLAGS= -DEMAP_POINT_DOUBLE -DRBT_IMPLITIC_LOCKING -fopenmp
 emap_LDFLAGS= -lm

@@ -215,7 +215,7 @@ int rbt_u32mem_getnode(rbt_t *rbt, uint32_t *key, size_t keylen, struct rbt_u32m
         n = rbt_node_ptr(rbt->root);
 
         while (n != NULL) {
-                assert(keylen == rbt_u32mem_none_keylen(n));
+                assert(keylen == rbt_u32mem_node_keylen(n));
                 n_key = rbt_u32mem_node_key(n);
                 cmp   = memcmp(u_key, n_key, sizeof(uint32_t) * keylen);
 

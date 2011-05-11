@@ -49,4 +49,11 @@
 # define dP(fmt, ...) while(0)
 #endif
 
+#define array_remove(arrayp, sizep, i)                                  \
+        do {                                                            \
+                memmove((arrayp) + (i), (arrayp) + (i) + 1, (sizeof arrayp[0]) * (*(sizep) - (i) - 1)); \
+                arrayp = realloc(arrayp, (sizeof arrayp[0]) * (*(sizep) - 1)); \
+                *(sizep) = *(sizep) - 1;                                \
+        } while(0)
+
 #endif /* HELPERS_H */

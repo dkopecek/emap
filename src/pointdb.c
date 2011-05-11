@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <errno.h>
 #include "emap.h"
 #include "helpers.h"
@@ -565,7 +566,7 @@ uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn
                          * look for the point with key `n_key' in the point index
                          */
                         if (__predict(rbt_u32mem_get(pdb->pindex, n_key, pdb->arity, (void **)&n_point) != 0, 0)) {
-#ifndef NDEBUG
+#if 0
                                 int a;
                                 fprintf(stderr, "ERROR: can't find neighboring point: p=(");
 
@@ -583,7 +584,7 @@ uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn
                                 goto __ret;
                         }
 
-#ifndef NDEBUG
+#if 0
                         if (p == n_point) {
                                 int a;
                                 fprintf(stderr, "DEBUG: p == n_point, d=(");
@@ -598,9 +599,9 @@ uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn
                         res = res & fn(pdb, p, n_point);
 
                         if (res == 0 || ++n == n_max) {
-#ifndef NDEBUG
-                                fprintf(stderr, "DEBUG: res=%s, n = %u\n", res ? "true" : "false", n);
-#endif
+//#ifndef NDEBUG
+//                                fprintf(stderr, "DEBUG: res=%s, n = %"PRIu64"\n", res ? "true" : "false", n);
+//#endif
                                 goto __ret;
                         }
 
@@ -615,7 +616,7 @@ uint32_t emap_pointnb_applyp(emap_pointdb_t *pdb, emap_point_t *p, uint32_t (*fn
 
                         ++i;
                         d_key[i] += 1;
-#ifndef NDEBUG
+#if 0
                         int a;
                         fprintf(stderr, "DEBUG: d=(");
                         /* n */
@@ -631,4 +632,25 @@ __ret:
         free(d_key);
 
         return (res);
+}
+
+int emap_point_keydistance(const emap_point_t *a, const emap_point_t *b, emap_pointdb_t *pdb)
+{
+        register int i, r = 0;
+
+        for (i = 0; i < pdb->arity; ++i)
+                r += abs(a->ptkey[i] - b->ptkey[i]);
+
+        return r;
+}
+
+bool emap_point_keyneighbor(const emap_point_t *a, const emap_point_t *b, emap_pointdb_t *pdb)
+{
+        register int  i;
+        register bool r = true;
+
+        for (i = 0; i < pdb->arity; ++i)
+                r &= abs(a->ptkey[i] - b->ptkey[i]) <= 1 ? true : false;
+
+        return r;
 }
