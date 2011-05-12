@@ -1,6 +1,16 @@
 #include "PES.h"
 #include "helpers.h"
 
+int emap_spoint_ycmp(const emap_spoint_t *a, const emap_spoint_t *b)
+{
+        if (a->cmaximum->y < b->cmaximum->y)
+                return (-1);
+        if (a->cmaximum->y > b->cmaximum->y)
+                return (1);
+        else
+                return (0);
+}
+
 int emap_surface_init(emap_surface_t *es)
 {
         es->tpoint = NULL;

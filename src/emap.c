@@ -10,7 +10,7 @@
 #include "PES.h"
 #include "DG.h"
 
-#define EMAP_SHORT_OPTIONS "c:y:o:E:hv"
+#define EMAP_SHORT_OPTIONS "c:y:s:o:E:hv"
 
 static void fprintu(FILE *stream, char *arg0)
 {
@@ -21,6 +21,9 @@ static void fprintu(FILE *stream, char *arg0)
         fprintf(stream, "\t-y <n>         Column number representing the dependent variable:\n");
         fprintf(stream, "\t                  0 ... last column (default)\n");
         fprintf(stream, "\t                  n ... n-th column (max. %u)\n\n", (1<<16) - 1);
+        fprintf(stream, "\t-s <n>         Height of the energy band used in building the DG.\n");
+        fprintf(stream, "\t               The value should be a floating point number larger\n");
+        fprintf(stream, "\t               than 0.\n\n");
         fprintf(stream, "\t-E <n>[,...]   Exclude n-th column. Multiple columns may be specified.\n\n");
         fprintf(stream, "\t-c <str>       Comment characters (lines starting wich such characters\n");
         fprintf(stream, "\t               will be skipped; default is \"%s\").\n\n", EMAP_COMMENT_CHARS);
@@ -46,6 +49,8 @@ int main(int argc, char *argv[])
         uint32_t *skip_x_n = NULL, x_n;
         size_t    skip_n   = 0;
 
+        emap_float dE = 0.0;
+
         arg0     = argv[0];
         path_in  = NULL;
         path_out = NULL;
@@ -61,6 +66,16 @@ int main(int argc, char *argv[])
                         if (opt_yn < 0 || opt_yn >= 1<<16) {
                                 fprintf(stderr,
                                         "Invalid value for option `-y': only values from the interval <%u,%u> are allowed\n", 0, (1<<16) - 1);
+                                fprintu(stderr, arg0);
+                                return (EXIT_FAILURE);
+                        }
+
+                        break;
+                case 's':
+                        dE = emap_strtoflt(optarg, NULL);
+
+                        if (dE <= 0) {
+                                fprintf(stderr, "Invalid value for option `-s': only a value larger than 0 is allowed\n");
                                 fprintu(stderr, arg0);
                                 return (EXIT_FAILURE);
                         }
@@ -116,6 +131,12 @@ int main(int argc, char *argv[])
 
         if (argc != 1) {
                 fprintf(stderr, "Expecting exactly one input file.\n");
+                fprintu(stderr, arg0);
+                return (EXIT_FAILURE);
+        }
+
+        if (dE <= 0.0) {
+                fprintf(stderr, "Required option `-s' not specified!\n");
                 fprintu(stderr, arg0);
                 return (EXIT_FAILURE);
         }
@@ -185,26 +206,43 @@ int main(int argc, char *argv[])
 
         if (opt_verbose) {
                 printf("[i] Found %zu POIs\n"
-                       "       local minima: %zu\n"
-                       "  transition points: %zu\n"
-                       "            overlap: %s\n",
+                       "       local minima candidates: %zu\n"
+                       "  transition points candidates: %zu\n"
+                       "                       overlap: %s\n",
                        POIdb.pcount, POIdb.mcount, POIdb.tcount,
                        POIdb.tcount + POIdb.mcount > POIdb.pcount ? "yes" : "no");
+                printf("[i] Preparing an abstract surface for superbasin analysis... ");
         }
 
         es = POI_postprocess(&pdb, &POIdb);
 
         if (es == NULL) {
+                if (opt_verbose)
+                        printf("FAILED\n");
                 fprintf(stderr, "ERROR: post-processing of POIs failed\n");
                 return (EXIT_FAILURE);
         }
 
-        dg = DG_create(es);
+        if (opt_verbose) {
+                printf("OK\n");
+                printf("[i] The abstract surface has a total of %zu points\n"
+                       "       local minima: %zu\n"
+                       "  transition points: %zu\n",
+                       es->mcount + es->tcount, es->mcount, es->tcount);
+                printf("[i] Building the DG with dE set to %f... ", dE);
+        }
+
+        dg = DG_create(es, dE);
 
         if (dg == NULL) {
-                fprintf(stderr, "ERROR: unable to create a disconnectivity graph from the POI set\n");
+                if (opt_verbose)
+                        printf("FAILED\n");
+                fprintf(stderr, "ERROR: unable to create a disconnectivity graph from the abstract surface\n");
                 return (EXIT_FAILURE);
         }
+
+        if (opt_verbose)
+                printf("OK\n");
 
         if (DG_write(dg, path_out)) {
                 fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out);

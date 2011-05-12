@@ -68,6 +68,11 @@ static int POI_cmp(const emap_point_t **a, const emap_point_t **b, emap_pointdb_
                 return (1);
 }
 
+static int spoint_ycmp(const emap_spoint_t **a, const emap_spoint_t **b)
+{
+        return emap_spoint_ycmp(*a, *b);
+}
+
 emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 {
         emap_surface_t *es;
@@ -123,11 +128,39 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: new surface point %p with %zu components\n", sp, sp->compcount);
-                for (i = 0; i < sp->compcount; ++i)
+#endif
+                sp->flags = UINT32_MAX;
+
+                for (i = 0; i < sp->compcount; ++i) {
+#ifndef NDEBUG
                         fprintf(stderr, "DEBUG:  y[%zu](%p) = %f\n", i, sp->component[i], sp->component[i]->y);
 #endif
+                        sp->flags &= sp->component[i]->flags;
+                }
+
+                assert((sp->flags & (POI_FLAG_MINIMUM|POI_FLAG_TRANSITION)) != (POI_FLAG_MINIMUM|POI_FLAG_TRANSITION));
+#ifndef NDEBUG
+                fprintf(stderr, "DEBUG:  the surface point is a %s\n",
+                        sp->flags & POI_FLAG_MINIMUM ? "local minimum" : "transition point");
+#endif
+                if (sp->flags & POI_FLAG_MINIMUM) {
+                        es->mpoint = realloc_array(es->mpoint, emap_spoint_t *, ++es->mcount);
+                        es->mpoint[es->mcount - 1] = sp;
+                } else {
+                        es->tpoint = realloc_array(es->tpoint, emap_spoint_t *, ++es->tcount);
+                        es->tpoint[es->tcount - 1] = sp;
+                }
         }
 
+        qsort(es->mpoint, es->mcount, sizeof(emap_spoint_t *),
+              (int(*)(const void *, const void *))spoint_ycmp);
+
+        qsort(es->tpoint, es->tcount, sizeof(emap_spoint_t *),
+              (int(*)(const void *, const void *))spoint_ycmp);
+
+#ifndef NDEBUG
+        fprintf(stderr, "DEBUG: mcount=%zu, tcount=%zu\n", es->mcount, es->tcount);
+#endif
         return (es);
 __fail:
         if (es != NULL) {
