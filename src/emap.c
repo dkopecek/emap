@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 
         arg0     = argv[0];
         path_in  = NULL;
-        path_out = NULL;
+        path_out = strdup("emap-output.dot");
 
         while ((opt = getopt(argc, argv, EMAP_SHORT_OPTIONS)) != -1) {
                 switch(opt) {
@@ -232,7 +232,7 @@ int main(int argc, char *argv[])
                 printf("[i] Building the DG with dE set to %f... ", dE);
         }
 
-        dg = DG_create(&pdb, es, dE);
+        dg = DG_create(&pdb, es, dE, opt_verbose ? true : false);
 
         if (dg == NULL) {
                 if (opt_verbose)
@@ -242,7 +242,7 @@ int main(int argc, char *argv[])
         }
 
         if (opt_verbose)
-                printf("OK\n");
+                printf(" OK\n");
 
         if (DG_write(dg, path_out)) {
                 fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out);

@@ -15,7 +15,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 CFLAGS="$CFLAGS -pipe -std=c99 -W -Wall -Wnonnull -Wno-unknown-pragmas -D_GNU_SOURCE"
 
 CFLAGS_DEBUGGING="-fno-inline-functions -O0 -g3 -fstack-protector -fstack-check"
-CFLAGS_OPTIMIZED="-O2 -fomit-frame-pointer -DNDEBUG"
+CFLAGS_OPTIMIZED="-O3 -ffast-math -fomit-frame-pointer -DNDEBUG"
 
 # Some parts of the code pass small integer values thru a pointer
 # argument, so all warnings muted by the options specified bellow

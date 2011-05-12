@@ -99,6 +99,7 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                 sp->compcount = 1;
 
                 sp->component[0] = POIdb->points[POIdb->pcount - 1];
+                sp->flags    = sp->component[0]->flags;
                 sp->cmaximum = sp->cminimum = sp->component[0];
                 array_remove(POIdb->points, &POIdb->pcount, POIdb->pcount - 1);
 
@@ -108,7 +109,7 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                                  * Merge neighbors
                                  */
                                 if (emap_point_keyneighbor(POIdb->points[i],
-                                                           sp->component[j], pdb))
+                                                           sp->component[j], pdb) && (sp->flags & POIdb->points[i]->flags))
                                 {
 #ifndef NDEBUG
                                         fprintf(stderr, "DEBUG: adding new point %p to component %p\n",

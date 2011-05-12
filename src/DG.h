@@ -10,13 +10,14 @@ struct DG_node {
         struct DG_node **child; /**< pointer to the lower level superbasins or the leaf points/minima */
         size_t           count; /**< if child != NULL, the number of child nodes, otherwise the level of the minimum (0 - means that this is a global minimum */
         emap_spoint_t   *point; /**< The abstract surface point representing a minimum */
+        uint32_t         id;
 };
 
 typedef struct {
         struct DG_node *root;
 } DG_t;
 
-DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE);
+DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool progress);
 int DG_write(DG_t *dg, const char *path);
 
 #endif /* DG_H */

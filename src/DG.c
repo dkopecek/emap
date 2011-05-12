@@ -11,13 +11,15 @@ typedef struct {
         bool            firstm; /**< first merge of this basin? */
 } SB_t;
 
-DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
+DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool progress)
 {
-        SB_t  *sb;
+        DG_t *dg;
+        SB_t *sb;
         register size_t i, j, k;
         size_t sbcount;
         emap_float El, Eh; /**< energy band boundaries - low, high */
         size_t Ti; /**< transition point array index */
+        uint32_t next_id;
 
         sbcount = es->mcount;
         sb      = alloc_array(SB_t, sbcount);
@@ -35,7 +37,10 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
                 sb[i].dgnode->child = NULL;
                 sb[i].dgnode->count = i;
                 sb[i].dgnode->point = es->mpoint[i];
+                sb[i].dgnode->id    = i;
         }
+
+        next_id = sbcount;
 
         El   = sb[0].spoint->cmaximum->y;
         Eh   = El + dE;
@@ -87,7 +92,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
                                          */
                                         if (Tmin->cminimum->y < Eh) {
 #ifndef NDEBUG
-                                                fprintf(stderr, "DEBUG: found a transition point between sb[%zu] <-> sb[%zu] in the current energy band\n", i, j);
+                                                fprintf(stderr, "DEBUG: found a transition point between sb[%zu] <-> sb[%zu] in the current energy band (sbcount=%zu)\n", i, j, sbcount);
 #endif
                                                 /**
                                                  * merge sb[j] into sb[i]
@@ -95,6 +100,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
                                                 if (sb[i].firstm) {
                                                         struct DG_node *node = alloc_type(struct DG_node);
 
+                                                        node->id    = next_id++;
                                                         node->child = alloc_array(struct DG_node *, 2);
                                                         node->point = NULL;
                                                         node->count = 2;
@@ -128,6 +134,11 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
 
                                                 emap_spoint_merge(sb[i].spoint, sb[j].spoint);
                                                 array_remove(sb, &sbcount, j);
+
+                                                if (progress)
+                                                        printf("%3.u%%\b\b\b\b",
+                                                               (unsigned int)((1.0 - ((double)sbcount/(double)es->mcount)) * 100.0));
+
                                                 goto __restart;
                                         }
                                 }
@@ -144,10 +155,50 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
 #endif
         }
 
-        return NULL;
+        dg = alloc_type(DG_t);
+        dg->root = sb[0].dgnode;
+
+        return (dg);
+}
+
+static void DG_write_node(FILE *fp, struct DG_node *n)
+{
+        register size_t i;
+
+        if (n == NULL)
+                return;
+
+        if (n->child != NULL) {
+                for (i = 0; i < n->count; ++i)
+                        fprintf(fp, "%u -- %u\n", n->id, n->child[i]->id);
+                for (i = 0; i < n->count; ++i)
+                        DG_write_node(fp, n->child[i]);
+        } else {
+                // what?
+        }
 }
 
 int DG_write(DG_t *dg, const char *path)
 {
-        return (-1);
+        FILE *fp;
+
+        fp = fopen(path, "w");
+
+        if (fp == NULL) {
+#ifndef NDEBUG
+                fprintf(stderr, "DEBUG: can't open \"%s\" for writing\n", path);
+#endif
+                return (-1);
+        }
+
+        fprintf(fp, "graph DG {\n");
+        fprintf(fp, "\t node  [decorate=false,shape=point,style=filled];\n");
+        fprintf(fp, "\t edge  [decorate=false,dir=none,arrowhead=none,arrowtail=none];\n");
+
+        DG_write_node(fp, dg->root);
+        fprintf(fp, "}\n");
+
+        fclose(fp);
+
+        return (0);
 }
