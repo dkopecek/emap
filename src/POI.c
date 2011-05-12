@@ -68,9 +68,14 @@ static int POI_cmp(const emap_point_t **a, const emap_point_t **b, emap_pointdb_
                 return (1);
 }
 
-static int spoint_ycmp(const emap_spoint_t **a, const emap_spoint_t **b)
+static int spoint_ymaxcmp(const emap_spoint_t **a, const emap_spoint_t **b)
 {
-        return emap_spoint_ycmp(*a, *b);
+        return emap_spoint_ymaxcmp(*a, *b);
+}
+
+static int spoint_ymincmp(const emap_spoint_t **a, const emap_spoint_t **b)
+{
+        return emap_spoint_ymincmp(*a, *b);
 }
 
 emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
@@ -93,7 +98,8 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                 sp->component = alloc_array(emap_point_t *, 1);
                 sp->compcount = 1;
 
-                sp->component[0] = sp->cmaximum = POIdb->points[POIdb->pcount - 1];
+                sp->component[0] = POIdb->points[POIdb->pcount - 1];
+                sp->cmaximum = sp->cminimum = sp->component[0];
                 array_remove(POIdb->points, &POIdb->pcount, POIdb->pcount - 1);
 
                 for (i = 0; i < POIdb->pcount; ++i) {
@@ -115,6 +121,9 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                                         /* update component maximum */
                                         if (sp->cmaximum->y < sp->component[sp->compcount - 1]->y)
                                                 sp->cmaximum = sp->component[sp->compcount - 1];
+                                        /* update component minimum */
+                                        else if (sp->cminimum->y > sp->component[sp->compcount - 1]->y)
+                                                sp->cminimum = sp->component[sp->compcount - 1];
 
                                         /* update the array of local minina */
                                         array_remove(POIdb->points, &POIdb->pcount, i);
@@ -129,7 +138,7 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: new surface point %p with %zu components\n", sp, sp->compcount);
 #endif
-                sp->flags = UINT32_MAX;
+                sp->flags = UINT32_MAX; /**< set all bits */
 
                 for (i = 0; i < sp->compcount; ++i) {
 #ifndef NDEBUG
@@ -152,11 +161,19 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                 }
         }
 
+        /**
+         * Sort the minima so we can walk thru the array lineary
+         * as the energy band moves up to higher energies.
+         */
         qsort(es->mpoint, es->mcount, sizeof(emap_spoint_t *),
-              (int(*)(const void *, const void *))spoint_ycmp);
+              (int(*)(const void *, const void *))spoint_ymaxcmp);
 
+        /**
+         * Sort the transition points by the lowest energy of a component
+         * since we are interested in such points between two minima.
+         */
         qsort(es->tpoint, es->tcount, sizeof(emap_spoint_t *),
-              (int(*)(const void *, const void *))spoint_ycmp);
+              (int(*)(const void *, const void *))spoint_ymincmp);
 
 #ifndef NDEBUG
         fprintf(stderr, "DEBUG: mcount=%zu, tcount=%zu\n", es->mcount, es->tcount);

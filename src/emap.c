@@ -232,7 +232,7 @@ int main(int argc, char *argv[])
                 printf("[i] Building the DG with dE set to %f... ", dE);
         }
 
-        dg = DG_create(es, dE);
+        dg = DG_create(&pdb, es, dE);
 
         if (dg == NULL) {
                 if (opt_verbose)
