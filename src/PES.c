@@ -1,3 +1,4 @@
+#include <string.h>
 #include <assert.h>
 #include "PES.h"
 #include "helpers.h"
@@ -38,7 +39,7 @@ int emap_spoint_mindistance(const emap_spoint_t *a, const emap_spoint_t *b, emap
 
         size_t i, j, cur, min = SIZE_MAX;
 
-#pragma omp parallel for private(j, cur)
+#pragma omp parallel for private(j, cur) if (a->compcount > 1024)
         for (i = 0; i < a->compcount; ++i) {
                 for (j = 0; j < b->compcount; ++j) {
                         cur = emap_point_keydistance(a->component[i], b->component[j], pdb);
@@ -51,6 +52,26 @@ int emap_spoint_mindistance(const emap_spoint_t *a, const emap_spoint_t *b, emap
         }
 
         return (min);
+}
+
+int emap_spoint_merge(emap_spoint_t *dst, const emap_spoint_t *src)
+{
+        dst->flags     &= src->flags;
+        dst->component  = realloc_array(dst->component, emap_point_t *,
+                                        dst->compcount + src->compcount);
+
+        memcpy(dst->component + dst->compcount,
+               src->component, sizeof(emap_point_t *) * src->compcount);
+
+        dst->compcount += src->compcount;
+
+        if (dst->cmaximum->y < src->cmaximum->y)
+                dst->cmaximum = src->cmaximum;
+
+        if (dst->cminimum->y > src->cminimum->y)
+                dst->cminimum = src->cminimum;
+
+        return (0);
 }
 
 int emap_surface_init(emap_surface_t *es)

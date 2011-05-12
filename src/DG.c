@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "POI.h"
 #include "PES.h"
 #include "DG.h"
@@ -13,7 +14,8 @@ typedef struct {
 DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
 {
         SB_t  *sb;
-        register size_t sbcount, i, j, k;
+        register size_t i, j, k;
+        size_t sbcount;
         emap_float El, Eh; /**< energy band boundaries - low, high */
         size_t Ti; /**< transition point array index */
 
@@ -57,6 +59,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
                          * nodes with edges to the basins that are being merged.
                          */
                         for (i = 0; i < sbcount; ++i) {
+                        __restart:
                                 for (j = i + 1; j < sbcount; ++j) {
                                         /*
                                          * find the minimal distance from `i' to `j' over
@@ -86,8 +89,51 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE)
 #ifndef NDEBUG
                                                 fprintf(stderr, "DEBUG: found a transition point between sb[%zu] <-> sb[%zu] in the current energy band\n", i, j);
 #endif
+                                                /**
+                                                 * merge sb[j] into sb[i]
+                                                 */
+                                                if (sb[i].firstm) {
+                                                        struct DG_node *node = alloc_type(struct DG_node);
+
+                                                        node->child = alloc_array(struct DG_node *, 2);
+                                                        node->point = NULL;
+                                                        node->count = 2;
+                                                        node->child[0] = sb[i].dgnode;
+                                                        node->child[1] = sb[j].dgnode;
+
+                                                        sb[i].dgnode = node;
+                                                        sb[i].firstm = false;
+                                                } else {
+                                                        sb[i].dgnode->child = realloc_array(sb[i].dgnode->child,
+                                                                                            struct DG_node *, ++(sb[i].dgnode->count));
+                                                        sb[i].dgnode->child[sb[i].dgnode->count - 1] = sb[j].dgnode;
+                                                }
+
+                                                if (sb[i].spcopy) {
+                                                        emap_spoint_t *spcopy = alloc_type(emap_spoint_t);
+
+                                                        spcopy->flags     = sb[i].spoint->flags;
+                                                        spcopy->cmaximum  = sb[i].spoint->cmaximum;
+                                                        spcopy->cminimum  = sb[i].spoint->cminimum;
+
+                                                        spcopy->component = alloc_array(emap_point_t *, sb[i].spoint->compcount);
+                                                        spcopy->compcount = sb[i].spoint->compcount;
+
+                                                        memcpy(spcopy->component, sb[i].spoint->component,
+                                                               sizeof(emap_point_t *) * spcopy->compcount);
+
+                                                        sb[i].spcopy = false;
+                                                        sb[i].spoint = spcopy;
+                                                }
+
+                                                emap_spoint_merge(sb[i].spoint, sb[j].spoint);
+                                                array_remove(sb, &sbcount, j);
+                                                goto __restart;
                                         }
                                 }
+
+                                /* reset the first merge flag for the next level */
+                                sb[i].firstm = true;
                         }
                 }
 

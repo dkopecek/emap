@@ -23,6 +23,8 @@ int emap_spoint_ymaxcmp(const emap_spoint_t *a, const emap_spoint_t *b);
 int emap_spoint_ymincmp(const emap_spoint_t *a, const emap_spoint_t *b);
 int emap_spoint_mindistance(const emap_spoint_t *a, const emap_spoint_t *b, emap_pointdb_t *pdb);
 
+int emap_spoint_merge(emap_spoint_t *dst, const emap_spoint_t *src);
+
 int emap_surface_init(emap_surface_t *es);
 emap_surface_t *emap_surface_new(void);
 
