@@ -10,6 +10,7 @@
 typedef struct {
         uint32_t   flags; /**< flags */
         uint32_t  *ptkey; /**< point key */
+        uint32_t   line;  /**< line number in the original file */
         emap_float y;     /**< dependent variable */
         emap_float x[];   /**< inline array of independent vari`ables */
 } emap_point_t;

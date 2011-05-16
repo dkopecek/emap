@@ -39,15 +39,12 @@ int emap_spoint_mindistance(const emap_spoint_t *a, const emap_spoint_t *b, emap
 
         size_t i, j, cur, min = SIZE_MAX;
 
-#pragma omp parallel for private(j, cur) if (a->compcount > 64)
+#pragma omp parallel for if(a->compcount > 8) shared(min) private(j, cur) schedule(dynamic,32)
         for (i = 0; i < a->compcount; ++i) {
                 for (j = 0; j < b->compcount; ++j) {
                         cur = emap_point_keydistance(a->component[i], b->component[j], pdb);
 #pragma omp critical
-                        {
-                                if (cur < min)
-                                        min = cur;
-                        }
+                        if (cur < min) min = cur;
                 }
         }
 

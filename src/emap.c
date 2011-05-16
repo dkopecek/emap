@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include "emap.h"
 #include "helpers.h"
@@ -10,7 +11,7 @@
 #include "PES.h"
 #include "DG.h"
 
-#define EMAP_SHORT_OPTIONS "c:y:s:o:E:hv"
+#define EMAP_SHORT_OPTIONS "c:y:s:o:E:t:m:nhv"
 
 static void fprintu(FILE *stream, char *arg0)
 {
@@ -26,6 +27,9 @@ static void fprintu(FILE *stream, char *arg0)
         fprintf(stream, "\t               than 0.\n\n");
         fprintf(stream, "\t-E <n>[,...]   Exclude n-th column. Multiple columns may be specified.\n\n");
         fprintf(stream, "\t-c <str>       Comment characters (lines starting wich such characters\n");
+        fprintf(stream, "\t-m <file>      Dump found local minima into `file'.\n");
+        fprintf(stream, "\t-t <file>      Dump transition points into `file'.\n");
+        fprintf(stream, "\t-n             Skip superbasin analysis and, therefore, building of the DG.\n");
         fprintf(stream, "\t               will be skipped; default is \"%s\").\n\n", EMAP_COMMENT_CHARS);
         fprintf(stream, "\t-v             Be verbose.\n");
         fprintf(stream, "\t-h             This help.\n");
@@ -50,6 +54,8 @@ int main(int argc, char *argv[])
         size_t    skip_n   = 0;
 
         emap_float dE = 0.0;
+        bool skip_DG = false;
+        char *dump_mfile = NULL, *dump_tfile = NULL;
 
         arg0     = argv[0];
         path_in  = NULL;
@@ -119,6 +125,15 @@ int main(int argc, char *argv[])
                         opt_verbose = 1;
                         setbuf(stdout, NULL);
                         break;
+                case 'n':
+                        skip_DG = true;
+                        break;
+                case 'm':
+                        dump_mfile = optarg;
+                        break;
+                case 't':
+                        dump_tfile = optarg;
+                        break;
                 default:
                         fprintf(stderr, "Unknown option `%c'\n", optopt);
                         fprintu(stderr, arg0);
@@ -135,7 +150,7 @@ int main(int argc, char *argv[])
                 return (EXIT_FAILURE);
         }
 
-        if (dE <= 0.0) {
+        if (dE <= 0.0 && !skip_DG) {
                 fprintf(stderr, "Required option `-s' not specified!\n");
                 fprintu(stderr, arg0);
                 return (EXIT_FAILURE);
@@ -229,24 +244,58 @@ int main(int argc, char *argv[])
                        "       local minima: %zu\n"
                        "  transition points: %zu\n",
                        es->mcount + es->tcount, es->mcount, es->tcount);
-                printf("[i] Building the DG with dE set to %f... ", dE);
         }
 
-        dg = DG_create(&pdb, es, dE, opt_verbose ? true : false);
+        if (dump_tfile != NULL) {
+                FILE *fp;
+                size_t i, a;
 
-        if (dg == NULL) {
+                fp = fopen(dump_tfile, "w");
+
+                /* write: x0 x1 ... xn y */
+                for (i = 0; i < es->tcount; ++i) {
+                        fprintf(fp, "%"PRIu32" ", es->tpoint[i]->cmaximum->line);
+
+                        for (a = 0; a < pdb.arity; ++a)
+                                fprintf(fp, "%lf ", es->tpoint[i]->cmaximum->x[a]);
+                        fprintf(fp, "%lf\n", es->tpoint[i]->cmaximum->y);
+                }
+
+                fclose(fp);
+        }
+
+        if (dump_mfile != NULL) {
+                FILE *fp;
+                size_t i, a;
+
+                fp = fopen(dump_mfile, "w");
+
+                for (i = 0; i < es->mcount; ++i) {
+                        fprintf(fp, "%"PRIu32" ", es->mpoint[i]->cminimum->line);
+
+                        for (a = 0; a < pdb.arity; ++a)
+                                fprintf(fp, "%lf ", es->mpoint[i]->cminimum->x[a]);
+                        fprintf(fp, "%lf\n", es->mpoint[i]->cminimum->y);
+                }
+
+                fclose(fp);
+        }
+
+        if (!skip_DG) {
                 if (opt_verbose)
-                        printf("FAILED\n");
-                fprintf(stderr, "ERROR: unable to create a disconnectivity graph from the abstract surface\n");
-                return (EXIT_FAILURE);
-        }
+                        printf("[i] Building the DG with dE set to %f... \n", dE);
 
-        if (opt_verbose)
-                printf(" OK\n");
+                dg = DG_create(&pdb, es, dE, opt_verbose ? true : false);
 
-        if (DG_write(dg, path_out)) {
-                fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out);
-                return (EXIT_FAILURE);
+                if (dg == NULL) {
+                        fprintf(stderr, "ERROR: unable to create a disconnectivity graph from the abstract surface\n");
+                        return (EXIT_FAILURE);
+                }
+
+                if (DG_write(dg, path_out)) {
+                        fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out);
+                        return (EXIT_FAILURE);
+                }
         }
 
         /*

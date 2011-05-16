@@ -47,7 +47,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
         FILE  *fp;
         char   line_buffer[EMAP_LINEBUFFER_SIZE], *row, **tok, *toksave;
         register unsigned int lines, xi, pi;
-        register unsigned int ts, i;
+        register unsigned int ts, i, l;
         unsigned int gi;
         emap_float res;
 
@@ -72,6 +72,8 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
         /*
          * Read in the first data row and determine parameters for subsequent reads
          */
+        l = 0; /* track current line number in this variable */
+
         for(;;) {
                 if (fgets(line_buffer, sizeof line_buffer, fp) == NULL) {
                         int r;
@@ -93,6 +95,8 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
                         fclose(fp);
                         return (EMAP_ENOBUF);
                 }
+
+                ++l;
 
                 /* skip comments */
                 if (strchr(c_chars, *row) == NULL)
@@ -239,6 +243,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
 #if !defined(NDEBUG) && defined(EMAP_PRINT_POINTS)
                 fprintf(stderr, "\n");
 #endif
+                emap_pointp(pdb, pi)->line = l;
 
                 /*
                  * checks
@@ -298,6 +303,8 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
                         free(tok);
                         return (EMAP_EINVAL);
                 }
+
+                ++l;
         } while(!feof(fp));
 _done:
         fclose(fp);

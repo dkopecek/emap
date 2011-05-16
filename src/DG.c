@@ -11,6 +11,33 @@ typedef struct {
         bool            firstm; /**< first merge of this basin? */
 } SB_t;
 
+#if 0
+typedef struct {
+        size_t *friend; /**< array of indexes we want to merge with */
+
+        /**
+         * we are already merged with an item with this
+         * index, our friend items will merge with that
+         * item too
+         */
+        size_t  merged_with;
+} mergeMapRec_t;
+
+typedef struct {
+        mergeMapRec_t *map;
+        size_t         count;
+} mergeMap_t;
+
+static mergeMap_t *sb_analyze(SB_t *sb, size_t sbcount, emap_surface_t *es)
+{
+        mergeMap_t *mm = alloc_type(mergeMap_t);
+
+        mm->map = alloc_array(mergeMapRec_t);
+
+        return (mm);
+}
+#endif
+
 DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool progress)
 {
         DG_t *dg;
@@ -58,6 +85,18 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                 fprintf(stderr, "DEBUG: Ti = %zu\n", Ti);
 #endif
                 if (es->tpoint[Ti]->cminimum->y < Eh) {
+#if 0
+                        mergeMap_t *mm;
+
+                        /**
+                         * Find out which basins are going to merge in the current energy band
+                         */
+                        mm = sb_analyze(&sb, es);
+
+                        /**
+                         * Perform the merge
+                         */
+#endif
                         /**
                          * Perform superbasin analysis, merge basins if they are connected
                          * by a pathway in the current energy band. Merging creates new DG
@@ -74,14 +113,43 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                         emap_spoint_t *Tmin = NULL; /**< transition point of the minimal pathway distance */
                                         size_t         Dmin = SIZE_MAX; /**< minimal distance */
                                         size_t         Dcur; /**< for intermediate results */
+                                        size_t         T1max;
 
-                                        for (k = Ti; k < es->tcount; ++k) {
+                                        T1max = Ti;
+
+                                        while (T1max < es->tcount) {
+                                                if (es->tpoint[T1max]->cminimum->y < Eh)
+                                                        ++T1max;
+                                                else
+                                                        break;
+                                        }
+
+                                        --T1max;
+
+#pragma omp parallel for if((T1max - Ti) >= 8) shared(Tmin, Dmin) private(k, Dcur) schedule(static)
+                                        for (k = Ti; k <= T1max; ++k) {
+                                                Dcur = emap_spoint_mindistance(sb[i].spoint, es->tpoint[k], pdb) + \
+                                                        emap_spoint_mindistance(sb[j].spoint, es->tpoint[k], pdb);
+#pragma omp critical
+                                                {
+                                                        if (Dcur < Dmin) {
+                                                                Tmin = es->tpoint[k];
+                                                                Dmin = Dcur;
+                                                        }
+                                                }
+                                        }
+
+                                        for (k = T1max + 1; k < es->tcount; ++k) {
                                                 Dcur = emap_spoint_mindistance(sb[i].spoint, es->tpoint[k], pdb) + \
                                                         emap_spoint_mindistance(sb[j].spoint, es->tpoint[k], pdb);
 
                                                 if (Dcur < Dmin) {
-                                                        Tmin    = es->tpoint[k];
-                                                        Dmin    = Dcur;
+                                                        Tmin = es->tpoint[k];
+
+                                                        if (Tmin->cminimum->y >= Eh)
+                                                                break;
+
+                                                        Dmin = Dcur;
                                                 }
                                         }
 
@@ -136,8 +204,9 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                                 array_remove(sb, &sbcount, j);
 
                                                 if (progress)
-                                                        printf("%3.u%%\b\b\b\b",
-                                                               (unsigned int)((1.0 - ((double)sbcount/(double)es->mcount)) * 100.0));
+                                                        printf("\r[i] %3.u%% E=<%.3e, %.3e> TP=%zu SB=%zu           ",
+                                                               (unsigned int)((1.0 - ((double)sbcount/(double)es->mcount)) * 100.0),
+                                                               El, Eh, es->tcount - Ti - 1, sbcount);
 
                                                 goto __restart;
                                         }
