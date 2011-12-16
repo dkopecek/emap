@@ -7,8 +7,8 @@
 #include <math.h>
 
 #if defined(EMAP_POINT_DOUBLE)
-typedef double emap_float;
-#define EMAP_FLTFMT "f"
+typedef long double emap_float;
+#define EMAP_FLTFMT "Le"
 
 #include <stdlib.h>
 

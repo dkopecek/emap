@@ -78,15 +78,26 @@ static int spoint_ymincmp(const emap_spoint_t **a, const emap_spoint_t **b)
         return emap_spoint_ymincmp(*a, *b);
 }
 
+static int _spdist_cmp(const emap_spdist_t *a, const emap_spdist_t *b)
+{
+	if (a->pptr < b->pptr)
+		return -1;
+	if (a->pptr > b->pptr)
+		return  1;
+	return emap_spoint_ymincmp(a->pptr, b->pptr);
+}
+
 emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 {
         emap_surface_t *es;
+	register size_t i, j;
+	emap_spdist_t *dist;
+	emap_spoint_t *cmin;
 
         es = emap_surface_new();
 
         while (POIdb->pcount > 0) {
                 emap_spoint_t *sp = alloc_type(emap_spoint_t);
-                register size_t i, j;
 
                 if (sp == NULL) {
 #ifndef NDEBUG
@@ -97,6 +108,9 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 
                 sp->component = alloc_array(emap_point_t *, 1);
                 sp->compcount = 1;
+
+		sp->cPOIcount = 0;
+		sp->cPOI = NULL;
 
                 sp->component[0] = POIdb->points[POIdb->pcount - 1];
                 sp->flags    = sp->component[0]->flags;
@@ -143,7 +157,7 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 
                 for (i = 0; i < sp->compcount; ++i) {
 #ifndef NDEBUG
-                        fprintf(stderr, "DEBUG:  y[%zu](%p) = %f\n", i, sp->component[i], sp->component[i]->y);
+                        fprintf(stderr, "DEBUG:  y[%zu](%p) = %"EMAP_FLTFMT"\n", i, sp->component[i], sp->component[i]->y);
 #endif
                         sp->flags &= sp->component[i]->flags;
                 }
@@ -175,6 +189,29 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
          */
         qsort(es->tpoint, es->tcount, sizeof(emap_spoint_t *),
               (int(*)(const void *, const void *))spoint_ymincmp);
+
+#ifndef NDEBUG
+        fprintf(stderr, "DEBUG: initializing the cPOI field for each minumum (mcount=%zu, tcount=%zu)\n", es->mcount, es->tcount);
+#endif
+	/**
+	 * For each minumum, calculate the distance to each transition point
+	 */
+//#pragma omp parallel for private(cmin, dist)
+	for (i = 0; i < es->mcount; ++i) {
+		dist = alloc_array(emap_spdist_t, es->tcount);
+		cmin = es->mpoint[i];
+
+		for (j = 0; j < es->tcount; ++j) {
+			dist[j].pptr = es->tpoint[j];
+			dist[j].dist = emap_spoint_mindistance(cmin, es->tpoint[j], pdb);
+		}
+
+		qsort(dist, es->tcount, sizeof(emap_spdist_t),
+		      (int(*)(const void *, const void *))_spdist_cmp);
+
+		cmin->cPOI = dist;
+		cmin->cPOIcount = es->tcount;
+	}
 
 #ifndef NDEBUG
         fprintf(stderr, "DEBUG: mcount=%zu, tcount=%zu\n", es->mcount, es->tcount);

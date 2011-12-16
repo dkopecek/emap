@@ -12,7 +12,7 @@ AM_INIT_AUTOMAKE([foreign tar-pax])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
-CFLAGS="$CFLAGS -pipe -std=c99 -W -Wall -Wnonnull -Wno-unknown-pragmas -D_GNU_SOURCE"
+CFLAGS="$CFLAGS -pipe -std=c99 -W -Wall -Wnonnull -Wno-unknown-pragmas -D_GNU_SOURCE -DEMAP_POINT_DOUBLE=1"
 
 CFLAGS_DEBUGGING="-fno-inline-functions -O0 -g3 -fstack-protector -fstack-check"
 CFLAGS_OPTIMIZED="-O3 -ffast-math -fomit-frame-pointer -DNDEBUG -mtune=native"

@@ -214,7 +214,7 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
 
                         /* convert string token to float/double */
                         if (gi == y_n) {
-                                emap_pointp(pdb, pi)->y     = res = emap_strtoflt(tok[gi], &toksave);
+                                emap_pointp(pdb, pi)->y     = res = logl(emap_strtoflt(tok[gi], &toksave));
                                 emap_pointp(pdb, pi)->flags = 0;
                                 emap_pointp(pdb, pi)->ptkey = alloc_array(uint32_t, pdb->arity);
                         } else {
@@ -474,8 +474,8 @@ int emap_pointdb_index(emap_pointdb_t *pdb)
 
                         fprintf(stderr, "(");
                         for (a = 0; a < pdb->arity - 1; ++a)
-                                fprintf(stderr, "%f ", emap_pointp(pdb, i)->x[a]);
-                        fprintf(stderr, "%f)\n", emap_pointp(pdb, i)->x[a]);
+                                fprintf(stderr, "%"EMAP_FLTFMT" ", emap_pointp(pdb, i)->x[a]);
+                        fprintf(stderr, "%"EMAP_FLTFMT")\n", emap_pointp(pdb, i)->x[a]);
 
                         return (EMAP_EUNKNOWN);
                 }

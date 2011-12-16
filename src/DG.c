@@ -46,7 +46,10 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
         size_t sbcount;
         emap_float El, Eh; /**< energy band boundaries - low, high */
         size_t Ti; /**< transition point array index */
+	size_t Ti_min, Ti_cur;
         uint32_t next_id;
+	int progress_out = 0;
+	int merge_event = 0;
 
         sbcount = es->mcount;
         sb      = alloc_array(SB_t, sbcount);
@@ -72,6 +75,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
         El   = sb[0].spoint->cmaximum->y;
         Eh   = El + dE;
         Ti   = 0;
+	Ti_min = SIZE_MAX;
 
         while (sbcount > 1) {
                 /*
@@ -85,23 +89,12 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                 fprintf(stderr, "DEBUG: Ti = %zu\n", Ti);
 #endif
                 if (es->tpoint[Ti]->cminimum->y < Eh) {
-#if 0
-                        mergeMap_t *mm;
-
-                        /**
-                         * Find out which basins are going to merge in the current energy band
-                         */
-                        mm = sb_analyze(&sb, es);
-
-                        /**
-                         * Perform the merge
-                         */
-#endif
                         /**
                          * Perform superbasin analysis, merge basins if they are connected
                          * by a pathway in the current energy band. Merging creates new DG
                          * nodes with edges to the basins that are being merged.
                          */
+
                         for (i = 0; i < sbcount; ++i) {
                         __restart:
                                 for (j = i + 1; j < sbcount; ++j) {
@@ -114,6 +107,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                         size_t         Dmin = SIZE_MAX; /**< minimal distance */
                                         size_t         Dcur; /**< for intermediate results */
                                         size_t         T1max;
+					time_t t1, t2;
 
                                         T1max = Ti;
 
@@ -128,32 +122,33 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
 #pragma omp parallel for if((T1max - Ti) >= 8) shared(Tmin, Dmin) private(k, Dcur) schedule(static)
                                         for (k = Ti; k <= T1max; ++k) {
-                                                Dcur = emap_spoint_mindistance(sb[i].spoint, es->tpoint[k], pdb) + \
-                                                        emap_spoint_mindistance(sb[j].spoint, es->tpoint[k], pdb);
+                                                Dcur = emap_spoint_mindistance_fast(sb[i].spoint, es->tpoint[k], pdb) + \
+                                                        emap_spoint_mindistance_fast(sb[j].spoint, es->tpoint[k], pdb);
 #pragma omp critical
                                                 {
                                                         if (Dcur < Dmin) {
                                                                 Tmin = es->tpoint[k];
                                                                 Dmin = Dcur;
+								Ti_min = k;
                                                         }
                                                 }
                                         }
 
                                         for (k = T1max + 1; k < es->tcount; ++k) {
-                                                Dcur = emap_spoint_mindistance(sb[i].spoint, es->tpoint[k], pdb) + \
-                                                        emap_spoint_mindistance(sb[j].spoint, es->tpoint[k], pdb);
+                                                Dcur = emap_spoint_mindistance_fast(sb[i].spoint, es->tpoint[k], pdb) + \
+                                                        emap_spoint_mindistance_fast(sb[j].spoint, es->tpoint[k], pdb);
 
                                                 if (Dcur < Dmin) {
                                                         Tmin = es->tpoint[k];
+                                                        Dmin = Dcur;
+							Ti_min = k;
 
                                                         if (Tmin->cminimum->y >= Eh)
                                                                 break;
-
-                                                        Dmin = Dcur;
                                                 }
                                         }
 
-                                        assert(Tmin != NULL);
+					assert(Tmin != NULL);
 
                                         /**
                                          * If `Tmin' is in the current energy band we can merge the basins.
@@ -162,6 +157,8 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 #ifndef NDEBUG
                                                 fprintf(stderr, "DEBUG: found a transition point between sb[%zu] <-> sb[%zu] in the current energy band (sbcount=%zu)\n", i, j, sbcount);
 #endif
+						merge_event = 1;
+
                                                 /**
                                                  * merge sb[j] into sb[i]
                                                  */
@@ -192,6 +189,8 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
                                                         spcopy->component = alloc_array(emap_point_t *, sb[i].spoint->compcount);
                                                         spcopy->compcount = sb[i].spoint->compcount;
+                                                        spcopy->cPOI      = sb[i].spoint->cPOI;
+                                                        spcopy->cPOIcount = sb[i].spoint->cPOIcount;
 
                                                         memcpy(spcopy->component, sb[i].spoint->component,
                                                                sizeof(emap_point_t *) * spcopy->compcount);
@@ -203,25 +202,69 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                                 emap_spoint_merge(sb[i].spoint, sb[j].spoint);
                                                 array_remove(sb, &sbcount, j);
 
-                                                if (progress)
-                                                        printf("\r[i] %3.u%% E=<%.3e, %.3e> TP=%zu SB=%zu           ",
+                                                if (progress) {
+							progress_out = 1;
+                                                        printf("\r[i] %3.u%% E=<%.3"EMAP_FLTFMT", %.3"EMAP_FLTFMT"> TP=%zu SB=%zu           ",
                                                                (unsigned int)((1.0 - ((double)sbcount/(double)es->mcount)) * 100.0),
                                                                El, Eh, es->tcount - Ti - 1, sbcount);
-
+						}
                                                 goto __restart;
                                         }
                                 }
-
+				
                                 /* reset the first merge flag for the next level */
                                 sb[i].firstm = true;
+				//printf("A!\n");
                         }
-                }
+                } else if (es->tpoint[Ti]->cminimum->y > Eh) {
+			Ti_min = Ti;
+		}
 
-                El = Eh;
-                Eh = El + dE;
+		if (merge_event || Ti_min == SIZE_MAX) {
+			El = Eh;
+			Eh = El + dE;
+
+			/*while (Eh == El) {
+				dE = dE * 10;
+				Eh = El + dE;
+				}*/
+
+			merge_event = 0;
+			Ti_cur = Ti_min = SIZE_MAX;
+		} else {
+			emap_spoint_t *Tmin;
+			emap_float dE2;
+
+			Tmin = es->tpoint[Ti_min];
+		
+			assert(Tmin->cminimum->y > Eh);
+			assert(((Tmin->cminimum->y - Eh)/ dE) > 0.0);
+
+			dE2 = (roundl((Tmin->cminimum->y - Eh)/ dE) - 1) * dE;
+			El  = Eh + dE2;
+			Eh  = El + dE;
+
+			/*
+			  while (Eh == El) {
+				dE = dE * 10;
+				Eh = El + dE;
+				}*/
+
+			assert(El != Eh);
+
+			Ti_cur = Ti_min = SIZE_MAX;
+
 #ifndef NDEBUG
-                fprintf(stderr, "DEBUG: moving to energy band <%f, %f>\n", El, Eh);
+			fprintf(stderr, "DEBUG: energy band skip: dE2=%"EMAP_FLTFMT"\n", dE2);
 #endif
+		}
+#ifndef NDEBUG
+                fprintf(stderr, "DEBUG: moving to energy band <%"EMAP_FLTFMT", %"EMAP_FLTFMT">\n", El, Eh);
+#endif
+		if (progress && progress_out) {
+			progress_out = 0;
+			putchar('\n');
+		}
         }
 
         dg = alloc_type(DG_t);

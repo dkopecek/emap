@@ -257,8 +257,8 @@ int main(int argc, char *argv[])
                         fprintf(fp, "%"PRIu32" ", es->tpoint[i]->cmaximum->line);
 
                         for (a = 0; a < pdb.arity; ++a)
-                                fprintf(fp, "%lf ", es->tpoint[i]->cmaximum->x[a]);
-                        fprintf(fp, "%lf\n", es->tpoint[i]->cmaximum->y);
+                                fprintf(fp, "%"EMAP_FLTFMT" ", es->tpoint[i]->cmaximum->x[a]);
+                        fprintf(fp, "%"EMAP_FLTFMT"\n", es->tpoint[i]->cmaximum->y);
                 }
 
                 fclose(fp);
@@ -274,8 +274,8 @@ int main(int argc, char *argv[])
                         fprintf(fp, "%"PRIu32" ", es->mpoint[i]->cminimum->line);
 
                         for (a = 0; a < pdb.arity; ++a)
-                                fprintf(fp, "%lf ", es->mpoint[i]->cminimum->x[a]);
-                        fprintf(fp, "%lf\n", es->mpoint[i]->cminimum->y);
+                                fprintf(fp, "%"EMAP_FLTFMT" ", es->mpoint[i]->cminimum->x[a]);
+                        fprintf(fp, "%"EMAP_FLTFMT"\n", es->mpoint[i]->cminimum->y);
                 }
 
                 fclose(fp);
@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
 
         if (!skip_DG) {
                 if (opt_verbose)
-                        printf("[i] Building the DG with dE set to %f... \n", dE);
+                        printf("[i] Building the DG with dE set to %"EMAP_FLTFMT"... \n", dE);
 
                 dg = DG_create(&pdb, es, dE, opt_verbose ? true : false);
 
