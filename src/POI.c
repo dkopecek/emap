@@ -60,6 +60,7 @@ void collect_POI(emap_pointdb_t *pdb, emap_point_t *p, void *arg)
         }
 }
 
+#if 0
 static int POI_cmp(const emap_point_t **a, const emap_point_t **b, emap_pointdb_t *pdb)
 {
         if (emap_point_keydistance(*a, *b, pdb) <= pdb->arity)
@@ -67,6 +68,7 @@ static int POI_cmp(const emap_point_t **a, const emap_point_t **b, emap_pointdb_
         else
                 return (1);
 }
+#endif
 
 static int spoint_ymaxcmp(const emap_spoint_t **a, const emap_spoint_t **b)
 {

@@ -11,33 +11,6 @@ typedef struct {
         bool            firstm; /**< first merge of this basin? */
 } SB_t;
 
-#if 0
-typedef struct {
-        size_t *friend; /**< array of indexes we want to merge with */
-
-        /**
-         * we are already merged with an item with this
-         * index, our friend items will merge with that
-         * item too
-         */
-        size_t  merged_with;
-} mergeMapRec_t;
-
-typedef struct {
-        mergeMapRec_t *map;
-        size_t         count;
-} mergeMap_t;
-
-static mergeMap_t *sb_analyze(SB_t *sb, size_t sbcount, emap_surface_t *es)
-{
-        mergeMap_t *mm = alloc_type(mergeMap_t);
-
-        mm->map = alloc_array(mergeMapRec_t);
-
-        return (mm);
-}
-#endif
-
 DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool progress)
 {
         DG_t *dg;
@@ -46,7 +19,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
         size_t sbcount;
         emap_float El, Eh; /**< energy band boundaries - low, high */
         size_t Ti; /**< transition point array index */
-	size_t Ti_min, Ti_cur;
+	size_t Ti_min;
         uint32_t next_id;
 	int progress_out = 0;
 	int merge_event = 0;
@@ -67,6 +40,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                 sb[i].dgnode->child = NULL;
                 sb[i].dgnode->count = i;
                 sb[i].dgnode->point = es->mpoint[i];
+		sb[i].dgnode->El    = es->mpoint[i]->cminimum->y;
                 sb[i].dgnode->id    = i;
         }
 
@@ -107,7 +81,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                         size_t         Dmin = SIZE_MAX; /**< minimal distance */
                                         size_t         Dcur; /**< for intermediate results */
                                         size_t         T1max;
-					time_t t1, t2;
+					//time_t t1, t2;
 
                                         T1max = Ti;
 
@@ -168,6 +142,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                                         node->id    = next_id++;
                                                         node->child = alloc_array(struct DG_node *, 2);
                                                         node->point = NULL;
+							node->El    = El;
                                                         node->count = 2;
                                                         node->child[0] = sb[i].dgnode;
                                                         node->child[1] = sb[j].dgnode;
@@ -230,7 +205,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 				}*/
 
 			merge_event = 0;
-			Ti_cur = Ti_min = SIZE_MAX;
+			Ti_min = SIZE_MAX;
 		} else {
 			emap_spoint_t *Tmin;
 			emap_float dE2;
@@ -252,7 +227,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
 			assert(El != Eh);
 
-			Ti_cur = Ti_min = SIZE_MAX;
+			Ti_min = SIZE_MAX;
 
 #ifndef NDEBUG
 			fprintf(stderr, "DEBUG: energy band skip: dE2=%"EMAP_FLTFMT"\n", dE2);
@@ -269,6 +244,11 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
         dg = alloc_type(DG_t);
         dg->root = sb[0].dgnode;
+	dg->Etrans = EMAP_ETRANS_NONE;
+	dg->mcount = es->mcount;
+	dg->dE = dE;
+	dg->Emax = El;
+	dg->Emin = es->mpoint[0]->cminimum->y;
 
         return (dg);
 }
@@ -294,14 +274,18 @@ int DG_write(DG_t *dg, const char *path)
 {
         FILE *fp;
 
-        fp = fopen(path, "w");
+	if (path == NULL)
+		fp = stdout;
+	else {
+		fp = fopen(path, "w");
 
-        if (fp == NULL) {
+		if (fp == NULL) {
 #ifndef NDEBUG
-                fprintf(stderr, "DEBUG: can't open \"%s\" for writing\n", path);
+			fprintf(stderr, "DEBUG: can't open \"%s\" for writing\n", path);
 #endif
-                return (-1);
-        }
+			return (-1);
+		}
+	}
 
         fprintf(fp, "graph DG {\n");
         fprintf(fp, "\t node  [decorate=false,shape=point,style=filled];\n");
@@ -310,7 +294,81 @@ int DG_write(DG_t *dg, const char *path)
         DG_write_node(fp, dg->root);
         fprintf(fp, "}\n");
 
-        fclose(fp);
+	if (fp != stdout)
+		fclose(fp);
 
         return (0);
+}
+
+static void DG_write_node_emap(FILE *fp, struct DG_node *n, struct DG_node *p)
+{
+        register size_t i;
+
+        if (n == NULL)
+                return;
+
+        if (n->child != NULL) {
+		fprintf(fp, "B %u %"EMAP_FLTFMT" %u %zu ",
+			n->id, n->El, p != NULL ? p->id : n->id, n->count);
+
+                for (i = 0; i < n->count; ++i)
+                        fprintf(fp, "%u%c", n->child[i]->id, i+1 == n->count ? '\n' : ' ');
+
+                for (i = 0; i < n->count; ++i)
+                        DG_write_node_emap(fp, n->child[i], n);
+        } else {
+		fprintf(fp, "M %u %"EMAP_FLTFMT" %u\n", n->id, n->El, p != NULL ? p->id : n->id);
+        }
+}
+
+int DG_write_emap(DG_t *dg, const char *path)
+{
+	FILE *fp;
+	char *Etrans;
+
+	assert (dg != NULL);
+
+	if (path == NULL)
+		fp = stdout;
+	else {
+		fp = fopen(path, "w");
+		if (fp == NULL) {
+#ifndef NDEBUG
+			fprintf(stderr, "DEBUG: can't open \"%s\" for writing\n", path);
+#endif
+			return (-1);
+		}
+	}
+
+	switch(dg->Etrans) {
+	case EMAP_ETRANS_LOG:
+		Etrans = "log";
+		break;
+	case EMAP_ETRANS_LOG2:
+		Etrans = "log2";
+		break;
+	case EMAP_ETRANS_LOG10:
+		Etrans = "log10";
+		break;
+	case EMAP_ETRANS_NONE:
+	default:
+		Etrans = "none";
+		break;
+	}
+
+	fprintf(fp, "#emap-"EMAP_VERSION"\n");
+	fprintf(fp, "#fltfmt=%s\n", EMAP_FLTFMT);
+	fprintf(fp, "#mcount=%zu\n", dg->mcount);
+	fprintf(fp, "#dE=%"EMAP_FLTFMT"\n", dg->dE);
+	fprintf(fp, "#Etrans=%s\n", Etrans);
+	fprintf(fp, "#Emax=%"EMAP_FLTFMT"\n", dg->Emax);
+	fprintf(fp, "#Emin=%"EMAP_FLTFMT"\n", dg->Emin);
+	fprintf(fp, "\n");
+
+	DG_write_node_emap(fp, dg->root, NULL);
+
+	if (fp != stdout)
+		fclose(fp);
+
+	return (0);
 }

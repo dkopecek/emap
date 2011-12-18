@@ -1,5 +1,11 @@
 #ifndef EMAP_H
 #define EMAP_H
+#include <config.h>
+
+#ifndef EMAP_VERSION
+# define EMAP_VERSION PACKAGE_VERSION
+#endif
+
 #include <assert.h>
 
 #define EMAP_COMMENT_CHARS "#;"

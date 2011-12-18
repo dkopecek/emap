@@ -43,11 +43,13 @@ static struct rbt_node *rbt_u32mem_node_alloc(void)
         return(n);
 }
 
+#if 0
 static void rbt_u32mem_node_free(struct rbt_node *n)
 {
         if (n != NULL)
                 free(rbt_node_ptr(n));
 }
+#endif
 
 rbt_t *rbt_u32mem_new (void)
 {

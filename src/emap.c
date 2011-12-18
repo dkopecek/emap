@@ -11,14 +11,15 @@
 #include "PES.h"
 #include "DG.h"
 
-#define EMAP_SHORT_OPTIONS "c:y:s:o:E:t:m:nhv"
+#define EMAP_SHORT_OPTIONS "c:y:s:o:O:E:t:m:nhv"
 
 static void fprintu(FILE *stream, char *arg0)
 {
         fprintf(stream, "\n");
         fprintf(stream, " Usage: %s [OPTIONS] <input>\n", basename(arg0));
         fprintf(stream, "\n");
-        fprintf(stream, "\t-o <file>      Output file or `-' for stdout (default is stdout).\n\n");
+        fprintf(stream, "\t-o <file>      Output file (dot/graphviz) or `-' for stdout (default is stdout).\n");
+	fprintf(stream, "\t-O <file>      Output file (emap) or `-' for stdout (default is stdout).\n\n");
         fprintf(stream, "\t-y <n>         Column number representing the dependent variable:\n");
         fprintf(stream, "\t                  0 ... last column (default)\n");
         fprintf(stream, "\t                  n ... n-th column (max. %u)\n\n", (1<<16) - 1);
@@ -38,9 +39,12 @@ static void fprintu(FILE *stream, char *arg0)
 
 int opt_verbose = 0;
 
+#include <time.h>
+#define pI(fmt, ...) printf("[i: %.2fs] "fmt, ((double)clock()/(double)(CLOCKS_PER_SEC)), ##__VA_ARGS__)
+
 int main(int argc, char *argv[])
 {
-        char *arg0, *path_in, *path_out, *tok;
+        char *arg0, *path_in, *path_out, *tok, *path_out_emap;
         int   opt, ret;
         int   opt_yn = 0;
         char *opt_comment = strdup(EMAP_COMMENT_CHARS);
@@ -59,13 +63,16 @@ int main(int argc, char *argv[])
 
         arg0     = argv[0];
         path_in  = NULL;
-        path_out = strdup("emap-output.dot");
+        path_out = path_out_emap = NULL;
 
         while ((opt = getopt(argc, argv, EMAP_SHORT_OPTIONS)) != -1) {
                 switch(opt) {
                 case 'o':
                         path_out = strdup(optarg);
                         break;
+		case 'O':
+			path_out_emap = strdup(optarg);
+			break;
                 case 'y':
                         opt_yn = atoi(optarg);
 
@@ -162,9 +169,9 @@ int main(int argc, char *argv[])
 
         if (opt_verbose) {
 #ifdef _OPENMP
-                printf("[i] Compiled with OpenMP support\n");
+                pI("Compiled with OpenMP support\n");
 #endif
-                printf("[i] Loading data points from \"%s\"... ", path_in);
+                pI("Loading data points from \"%s\"...\n", path_in);
         }
 
         ret = emap_pointdb_load(&pdb, path_in, opt_yn, skip_x_n, skip_n, opt_comment);
@@ -177,9 +184,9 @@ int main(int argc, char *argv[])
         }
 
         if (opt_verbose) {
-                printf("OK\n");
-                printf("[i] Loaded %zu data points, # of independent variables is %u\n", pdb.count, pdb.arity);
-                printf("[i] Generating index... ");
+                pI("OK\n");
+                pI("Loaded %zu data points, # of independent variables is %u\n", pdb.count, pdb.arity);
+                pI("Generating index...\n");
         }
 
         ret = emap_pointdb_index(&pdb);
@@ -193,8 +200,8 @@ int main(int argc, char *argv[])
 
         if (opt_verbose) {
                 int a;
-                printf("OK\n");
-                printf("[i] Key component boundaries:\n");
+                pI("OK\n");
+                pI("Key component boundaries:\n");
                 for (a = 0; a < pdb.arity; ++a)
                         printf("    x[%u] ... <0,%u>\n", a, pdb.keymax[a]);
         }
@@ -220,13 +227,13 @@ int main(int argc, char *argv[])
         emap_pointdb_apply_r(&pdb, collect_POI, &POIdb);
 
         if (opt_verbose) {
-                printf("[i] Found %zu POIs\n"
-                       "       local minima candidates: %zu\n"
-                       "  transition points candidates: %zu\n"
-                       "                       overlap: %s\n",
-                       POIdb.pcount, POIdb.mcount, POIdb.tcount,
-                       POIdb.tcount + POIdb.mcount > POIdb.pcount ? "yes" : "no");
-                printf("[i] Preparing an abstract surface for superbasin analysis... ");
+                pI("Found %zu POIs\n"
+                   "       local minima candidates: %zu\n"
+                   "  transition points candidates: %zu\n"
+                   "                       overlap: %s\n",
+		   POIdb.pcount, POIdb.mcount, POIdb.tcount,
+		   POIdb.tcount + POIdb.mcount > POIdb.pcount ? "yes" : "no");
+                pI("Preparing an abstract surface for superbasin analysis...\n");
         }
 
         es = POI_postprocess(&pdb, &POIdb);
@@ -239,11 +246,11 @@ int main(int argc, char *argv[])
         }
 
         if (opt_verbose) {
-                printf("OK\n");
-                printf("[i] The abstract surface has a total of %zu points\n"
-                       "       local minima: %zu\n"
-                       "  transition points: %zu\n",
-                       es->mcount + es->tcount, es->mcount, es->tcount);
+                pI("OK\n");
+                pI("The abstract surface has a total of %zu points\n"
+		   "       local minima: %zu\n"
+		   "  transition points: %zu\n",
+		   es->mcount + es->tcount, es->mcount, es->tcount);
         }
 
         if (dump_tfile != NULL) {
@@ -283,7 +290,7 @@ int main(int argc, char *argv[])
 
         if (!skip_DG) {
                 if (opt_verbose)
-                        printf("[i] Building the DG with dE set to %"EMAP_FLTFMT"... \n", dE);
+                        pI("Building the DG with dE set to %"EMAP_FLTFMT"... \n", dE);
 
                 dg = DG_create(&pdb, es, dE, opt_verbose ? true : false);
 
@@ -294,6 +301,11 @@ int main(int argc, char *argv[])
 
                 if (DG_write(dg, path_out)) {
                         fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out);
+                        return (EXIT_FAILURE);
+                }
+
+                if (DG_write_emap(dg, path_out_emap)) {
+                        fprintf(stderr, "ERROR: unable to write the disconnectivity graph to \"%s\"\n", path_out_emap);
                         return (EXIT_FAILURE);
                 }
         }
@@ -313,8 +325,13 @@ int main(int argc, char *argv[])
                 free(path_in);
         if (path_out != NULL)
                 free(path_out);
+        if (path_out_emap != NULL)
+                free(path_out_emap);
 
         free(opt_comment);
+
+	if (opt_verbose)
+		pI("Done.\n");
 
         return (EXIT_SUCCESS);
 }

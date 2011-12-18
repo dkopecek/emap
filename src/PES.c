@@ -47,8 +47,10 @@ size_t emap_spoint_mindistance_fast(const emap_spoint_t *a, const emap_spoint_t 
         assert(a != NULL);
         assert(b != NULL);
 	assert(a->cPOI != NULL);
-	
-	emap_spdist_t *res;
+
+       	emap_spdist_t *res;
+
+	(void)pdb;
 
 	res = bsearch(b, a->cPOI, a->cPOIcount, sizeof(emap_spdist_t),
 		      (int(*)(const void *, const void *))spdist_bcmp);
@@ -80,9 +82,12 @@ size_t emap_spoint_mindistance(const emap_spoint_t *a, const emap_spoint_t *b, e
 
 emap_spoint_t *emap_mindist_tpoint(const emap_spoint_t *a, const emap_spoint_t *b, emap_pointdb_t *pdb, emap_float El, emap_float Eh)
 {
-	emap_spoint_t *Tmin = NULL, *Tcur;
-	register size_t d = SIZE_MAX, cut_d, cur_d;
+	emap_spoint_t *Tmin = NULL;
+	register size_t d = SIZE_MAX, cur_d;
 	register size_t i, j;
+
+	(void)pdb;
+	(void)Eh;
 
 	assert(a != b);
 	assert(a != NULL);
@@ -129,7 +134,7 @@ emap_spoint_t *emap_mindist_tpoint(const emap_spoint_t *a, const emap_spoint_t *
 
 int emap_spoint_merge(emap_spoint_t *dst, const emap_spoint_t *src)
 {
-	register size_t i, j;
+	register size_t i;
 
         dst->flags     &= src->flags;
         dst->component  = realloc_array(dst->component, emap_point_t *,
