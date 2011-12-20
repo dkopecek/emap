@@ -20,6 +20,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
         emap_float El, Eh; /**< energy band boundaries - low, high */
         size_t Ti; /**< transition point array index */
 	size_t Ti_min;
+	size_t ncount;
         uint32_t next_id;
 	int progress_out = 0;
 	int merge_event = 0;
@@ -42,11 +43,13 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                 sb[i].dgnode->point = es->mpoint[i];
 		sb[i].dgnode->El    = es->mpoint[i]->cminimum->y;
                 sb[i].dgnode->id    = i;
+		sb[i].dgnode->msum  = 1;
         }
 
+	ncount  = sbcount;
         next_id = sbcount;
 
-        El   = sb[0].spoint->cmaximum->y;
+        El   = sb[0].spoint->cminimum->y;
         Eh   = El + dE;
         Ti   = 0;
 	Ti_min = SIZE_MAX;
@@ -57,12 +60,12 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                  * energy larger than or equal to `El'.
                  * XXX: implement as binary search since the array is sorted
                  */
-                while(es->tpoint[Ti]->cminimum->y < El)
+                while(es->tpoint[Ti]->cmaximum->y < El)
                         ++Ti;
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: Ti = %zu\n", Ti);
 #endif
-                if (es->tpoint[Ti]->cminimum->y < Eh) {
+                if (es->tpoint[Ti]->cmaximum->y < Eh) {
                         /**
                          * Perform superbasin analysis, merge basins if they are connected
                          * by a pathway in the current energy band. Merging creates new DG
@@ -70,8 +73,12 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                          */
 
                         for (i = 0; i < sbcount; ++i) {
+				if (sb[i].spoint->cminimum->y > Eh)
+					continue;
                         __restart:
                                 for (j = i + 1; j < sbcount; ++j) {
+					if (sb[j].spoint->cminimum->y > Eh)
+						continue;
                                         /*
                                          * find the minimal distance from `i' to `j' over
                                          * transition points with energy larger than or
@@ -86,7 +93,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                         T1max = Ti;
 
                                         while (T1max < es->tcount) {
-                                                if (es->tpoint[T1max]->cminimum->y < Eh)
+                                                if (es->tpoint[T1max]->cmaximum->y < Eh)
                                                         ++T1max;
                                                 else
                                                         break;
@@ -94,10 +101,11 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
                                         --T1max;
 
+#define b_mindist(b1, b2, tp) (emap_spoint_mindistance_fast(b1, tp, pdb) + emap_spoint_mindistance(b2, tp, pdb))
+
 #pragma omp parallel for if((T1max - Ti) >= 8) shared(Tmin, Dmin) private(k, Dcur) schedule(static)
                                         for (k = Ti; k <= T1max; ++k) {
-                                                Dcur = emap_spoint_mindistance_fast(sb[i].spoint, es->tpoint[k], pdb) + \
-                                                        emap_spoint_mindistance_fast(sb[j].spoint, es->tpoint[k], pdb);
+						Dcur = b_mindist(sb[i].spoint, sb[j].spoint, es->tpoint[k]);
 #pragma omp critical
                                                 {
                                                         if (Dcur < Dmin) {
@@ -109,8 +117,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                         }
 
                                         for (k = T1max + 1; k < es->tcount; ++k) {
-                                                Dcur = emap_spoint_mindistance_fast(sb[i].spoint, es->tpoint[k], pdb) + \
-                                                        emap_spoint_mindistance_fast(sb[j].spoint, es->tpoint[k], pdb);
+						Dcur = b_mindist(sb[i].spoint, sb[j].spoint, es->tpoint[k]);
 
                                                 if (Dcur < Dmin) {
                                                         Tmin = es->tpoint[k];
@@ -127,7 +134,10 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                         /**
                                          * If `Tmin' is in the current energy band we can merge the basins.
                                          */
-                                        if (Tmin->cminimum->y < Eh) {
+                                        if (Tmin->cmaximum->y < Eh &&
+					    Tmin->cmaximum->y > sb[i].spoint->cminimum->y &&
+					    Tmin->cmaximum->y > sb[j].spoint->cminimum->y)
+					{
 #ifndef NDEBUG
                                                 fprintf(stderr, "DEBUG: found a transition point between sb[%zu] <-> sb[%zu] in the current energy band (sbcount=%zu)\n", i, j, sbcount);
 #endif
@@ -142,17 +152,21 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                                         node->id    = next_id++;
                                                         node->child = alloc_array(struct DG_node *, 2);
                                                         node->point = NULL;
-							node->El    = El;
+							node->El    = Eh;
                                                         node->count = 2;
                                                         node->child[0] = sb[i].dgnode;
                                                         node->child[1] = sb[j].dgnode;
+							node->msum     = sb[i].dgnode->msum + sb[j].dgnode->msum;
 
                                                         sb[i].dgnode = node;
                                                         sb[i].firstm = false;
+
+							++ncount;
                                                 } else {
                                                         sb[i].dgnode->child = realloc_array(sb[i].dgnode->child,
                                                                                             struct DG_node *, ++(sb[i].dgnode->count));
                                                         sb[i].dgnode->child[sb[i].dgnode->count - 1] = sb[j].dgnode;
+                                                        sb[i].dgnode->msum += sb[j].dgnode->msum;
                                                 }
 
                                                 if (sb[i].spcopy) {
@@ -179,7 +193,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
                                                 if (progress) {
 							progress_out = 1;
-                                                        printf("\r[i] %3.u%% E=<%.3"EMAP_FLTFMT", %.3"EMAP_FLTFMT"> TP=%zu SB=%zu           ",
+                                                        printf("\r[i] %3.u%% E=<%"EMAP_FLTFMT", %"EMAP_FLTFMT"> TP=%zu SB=%zu           ",
                                                                (unsigned int)((1.0 - ((double)sbcount/(double)es->mcount)) * 100.0),
                                                                El, Eh, es->tcount - Ti - 1, sbcount);
 						}
@@ -212,12 +226,16 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
 			Tmin = es->tpoint[Ti_min];
 		
-			assert(Tmin->cminimum->y > Eh);
-			assert(((Tmin->cminimum->y - Eh)/ dE) > 0.0);
+			assert(Tmin->cmaximum->y > Eh);
+			assert(((Tmin->cmaximum->y - Eh)/ dE) > 0.0);
 
-			dE2 = (roundl((Tmin->cminimum->y - Eh)/ dE) - 1) * dE;
-			El  = Eh + dE2;
-			Eh  = El + dE;
+			//dE2 = (roundl((Tmin->cmaximum->y - Eh)/ dE) - 1) * dE;
+
+			El = Tmin->cmaximum->y - dE/2;
+			Eh = El + dE;
+
+			//El  = Eh + dE2;
+			//Eh  = El + dE;
 
 			/*
 			  while (Eh == El) {
@@ -238,7 +256,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 #endif
 		if (progress && progress_out) {
 			progress_out = 0;
-			putchar('\n');
+			//putchar('\n');
 		}
         }
 
@@ -246,8 +264,9 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
         dg->root = sb[0].dgnode;
 	dg->Etrans = EMAP_ETRANS_NONE;
 	dg->mcount = es->mcount;
+	dg->ncount = ncount;
 	dg->dE = dE;
-	dg->Emax = El;
+	dg->Emax = Eh;
 	dg->Emin = es->mpoint[0]->cminimum->y;
 
         return (dg);
@@ -308,8 +327,8 @@ static void DG_write_node_emap(FILE *fp, struct DG_node *n, struct DG_node *p)
                 return;
 
         if (n->child != NULL) {
-		fprintf(fp, "B %u %"EMAP_FLTFMT" %u %zu ",
-			n->id, n->El, p != NULL ? p->id : n->id, n->count);
+		fprintf(fp, "B %u %"EMAP_FLTFMT" %u %zu %zu ",
+			n->id, n->El, p != NULL ? p->id : n->id, n->msum, n->count);
 
                 for (i = 0; i < n->count; ++i)
                         fprintf(fp, "%u%c", n->child[i]->id, i+1 == n->count ? '\n' : ' ');
@@ -358,11 +377,25 @@ int DG_write_emap(DG_t *dg, const char *path)
 
 	fprintf(fp, "#emap-"EMAP_VERSION"\n");
 	fprintf(fp, "#fltfmt=%s\n", EMAP_FLTFMT);
+	fprintf(fp, "#ncount=%zu\n", dg->ncount);
 	fprintf(fp, "#mcount=%zu\n", dg->mcount);
 	fprintf(fp, "#dE=%"EMAP_FLTFMT"\n", dg->dE);
 	fprintf(fp, "#Etrans=%s\n", Etrans);
 	fprintf(fp, "#Emax=%"EMAP_FLTFMT"\n", dg->Emax);
+	fprintf(fp, "#EmaxID=%u\n", dg->root ? dg->root->id : 0);
 	fprintf(fp, "#Emin=%"EMAP_FLTFMT"\n", dg->Emin);
+	fprintf(fp, "#EminID=%u\n", 0); /**< we always assign 0 to the lowest/global minimum */
+	fprintf(fp, "#!\n");
+	fprintf(fp, "#! B <id> <E> <pid> <msum> <m> <cid> [<cid> ...]\n");
+	fprintf(fp, "#! M <id> <E> <pid>\n");
+	fprintf(fp, "#!\n");
+	fprintf(fp, "#!   id - node identification\n");
+	fprintf(fp, "#!    E - node identification\n");
+	fprintf(fp, "#!  pid - parent id\n");
+	fprintf(fp, "#! msum - sum of multiplicities in the subtree\n");
+	fprintf(fp, "#!    m - multiplicity\n");
+	fprintf(fp, "#!  cid - child id\n");
+	fprintf(fp, "#!\n");
 	fprintf(fp, "\n");
 
 	DG_write_node_emap(fp, dg->root, NULL);

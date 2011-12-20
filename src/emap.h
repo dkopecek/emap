@@ -14,7 +14,7 @@
 
 #if defined(EMAP_POINT_DOUBLE)
 typedef long double emap_float;
-#define EMAP_FLTFMT "Le"
+#define EMAP_FLTFMT ".10Lf"
 
 #include <stdlib.h>
 

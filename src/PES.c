@@ -101,7 +101,7 @@ emap_spoint_t *emap_mindist_tpoint(const emap_spoint_t *a, const emap_spoint_t *
 		if (d < a->cPOI[i].dist)
 			break;
 
-		if (a->cPOI[i].pptr->cminimum->y < El)
+		if (a->cPOI[i].pptr->cmaximum->y < a->cminimum->y)
 			continue;
 
 		for (j = 0; j < b->cPOIcount; ++j) {
@@ -109,7 +109,7 @@ emap_spoint_t *emap_mindist_tpoint(const emap_spoint_t *a, const emap_spoint_t *
 				break;
 
 			if (a->cPOI[i].pptr == b->cPOI[j].pptr &&
-			    b->cPOI[j].pptr->cminimum->y >= El)
+			    b->cPOI[j].pptr->cmaximum->y >= Eh)
 			{
 				cur_d = a->cPOI[i].dist + b->cPOI[j].dist;
 
