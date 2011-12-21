@@ -70,12 +70,43 @@ void setup() {
 	if (nodes[id].isBasin())
 	    drawScale(nodes[id].getEnergy()); 
     }
+
+    drawLegend();
    
     stroke(0);
    
     firstboot();
    
     smooth();
+}
+
+void drawLegend() {
+    strokeWeight(0.8);
+    fill(color(190, 190, 190));
+    textAlign(LEFT, BOTTOM);
+    textFont(font);
+    text("Node weight", garea_w + 5, garea_y0 + 15);
+    text("1.0", garea_w - 126, garea_y0 + 15);
+
+    for (int i = 0; i < 128; i++) {
+	stroke(color(i * 2, 100, 50));
+	line(garea_w - i, garea_y0 - 5,
+	     garea_w - i, garea_y0 - 15);
+    }
+
+    text("Edge weight", garea_w + 5, garea_y0 - 3);
+
+    for (int i = 0; i < 128; i++) {
+	stroke(color(i * 2, 0, 256 - i * 2));
+	line(garea_w - i, garea_y0 + 3,
+	     garea_w - i, garea_y0 + 13);
+    }
+
+    fill(0);
+    textFont(fontE);
+    text("1.0", garea_w - 126, garea_y0 + 14);
+    text("1.0", garea_w - 126, garea_y0 - 4);
+
 }
 
 void loadData(String path) {
@@ -301,7 +332,7 @@ void draw() {
 void keyPressed() {
     if (key == 'S') {
 	save(imout_path); 
-	println("Screenshot saved at /tmp/output.png");
+	println("Screenshot saved at " + imout_path);
     }
 }
 
