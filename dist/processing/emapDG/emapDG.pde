@@ -27,9 +27,12 @@ boolean debug_mode=false;
 
 int screen_width=1024;
 int screen_height=700;
+int marea_h=20;
 
 String input_path="/tmp/AAT.emap";
 String imout_path="/tmp/output.png";
+
+String Etrans="none";
 
 PFont font;
 PFont fontE;
@@ -37,7 +40,8 @@ PFont fontE;
 /**********************/
 
 void setParams() {
-    input_path="data/AAT.3.emap";
+    input_path="/tmp/n_AAT.emap";
+    //input_path="/tmp/foo.emap";
     imout_path=input_path + ".png";
     screen_width=1024;
     screen_height=700;
@@ -53,16 +57,16 @@ void setup() {
     loadData(input_path);
     prepData();
    
-    size(screen_width, screen_height);
+    size(screen_width, screen_height + marea_h);
     background(color(0,0,0));
   
     Eaxis_wd = (width / 100)  * 8;
-    Eaxis_hd = (height / 100) * 5;
+    Eaxis_hd = ((height - marea_h) / 100) * 5;
   
     garea_x0 = Eaxis_wd + 15;
     garea_y0 = Eaxis_hd;
     garea_w  = width  - (2 * Eaxis_wd);
-    garea_h  = height - (2 * Eaxis_hd);
+    garea_h  = (height - marea_h) - (2 * Eaxis_hd);
   
     drawAxis();
 
@@ -143,7 +147,11 @@ void loadData(String path) {
 		    } else if (hdr[0].equals("#Emax")) {
 			Emax=Float.parseFloat(hdr[1]) + 1.0;
 			if (debug_mode) println("Emax=" + Emax);
+		    } else if (hdr[0].equals("#Etrans")) {
+			Etrans=hdr[1];
+			if (debug_mode) println("Etrans=" + Etrans);
 		    }
+
 		}
 	    }
 	}
@@ -266,20 +274,28 @@ void drawAxis() {
     stroke(color(190,190,190));
 
     textAlign(CENTER, CENTER);
-    text("log(E)", Eaxis_wd/2, Eaxis_hd - Eaxis_hd/3);
-   
+
+    String Etxt;
+
+    if (Etrans.equals("none") || Etrans.equals(""))
+	Etxt="E";
+    else
+	Etxt="" + Etrans + "(E)";
+    
+    text(Etxt, Eaxis_wd/2, Eaxis_hd - Eaxis_hd/3);
+
     // top scale line
     line(Eaxis_wd, Eaxis_hd,
 	 Eaxis_wd + 10, Eaxis_hd);
-       
+
     // axis line
     line(Eaxis_wd, Eaxis_hd,
-	 Eaxis_wd, height - 1 - Eaxis_hd);
-       
+	 Eaxis_wd, (height - marea_h) - 1 - Eaxis_hd);
+
     // bottom scale line     
-    line(Eaxis_wd, height - 1 - Eaxis_hd,
-	 Eaxis_wd + 10, height - 1 - Eaxis_hd);
-       
+    line(Eaxis_wd, (height - marea_h) - 1 - Eaxis_hd,
+	 Eaxis_wd + 10, (height - marea_h) - 1 - Eaxis_hd);
+
     stroke(0);
 }
 
@@ -306,7 +322,7 @@ void drawScale(double E) {
 
 int EtoY(double E) {
     double y = garea_h * (E - Emin)/(Emax - Emin);
-    
+
     if (E < Emin || E > Emax) {
         if (debug_mode) println("FUCK! E=" + E + "; Emin=" + Emin + "; Emax=" + Emax);
         return -100;  
@@ -315,11 +331,37 @@ int EtoY(double E) {
     return (int)(garea_h - y);
 }
 
+void markGlobalMinimum() {
+    int x, y;
+
+    x = nodes[0].getX();
+    y = garea_y0 + EtoY(nodes[0].getEnergy());
+
+    strokeWeight(0.5);
+    stroke(color(190, 190, 190));
+
+    line(x + 1, y + 5,
+	 x + 10, y + 26);
+    line(x + 10, y + 26,
+	 x + 15, y + 26);
+
+    fill(color(255,255,255));
+    strokeWeight(0.8);
+    textFont(fontE);
+    textAlign(LEFT, CENTER);
+    text("" + nodes[0].getEnergy(), x + 18, y + 26);
+
+    
+    strokeWeight(1.0);
+    stroke(0);	 
+}
+
 void draw() {
     if (!nodraw) {
 	for (int i = 0; i < ncount; i++) {
 	    nodes[i].drawAt(nodes[i].getX(), garea_y0 + EtoY(nodes[i].getEnergy()));
-	} 
+	}
+	markGlobalMinimum();
 	smooth();
     }
     
