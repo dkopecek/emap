@@ -214,7 +214,23 @@ int emap_pointdb_load(emap_pointdb_t *pdb, const char *path, uint32_t y_n, uint3
 
                         /* convert string token to float/double */
                         if (gi == y_n) {
-			  emap_pointp(pdb, pi)->y     = res = log(emap_strtoflt(tok[gi], &toksave));
+				res = emap_strtoflt(tok[gi], &toksave);
+
+				switch(pdb->y_trans) {
+				case EMAP_TRANSFORM_NONE:
+					break;
+				case EMAP_TRANSFORM_LOG:
+					res = emap_log(res);
+					break;
+				case EMAP_TRANSFORM_LOG2:
+					res = emap_log2(res);
+					break;
+				case EMAP_TRANSFORM_LOG10:
+					res = emap_log10(res);
+					break;
+				}
+
+				emap_pointp(pdb, pi)->y     = res;
                                 emap_pointp(pdb, pi)->flags = 0;
                                 emap_pointp(pdb, pi)->ptkey = alloc_array(uint32_t, pdb->arity);
                         } else {

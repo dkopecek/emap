@@ -6,6 +6,13 @@
 # define EMAP_VERSION PACKAGE_VERSION
 #endif
 
+enum emap_transfn {
+  EMAP_TRANSFORM_NONE,
+  EMAP_TRANSFORM_LOG,
+  EMAP_TRANSFORM_LOG2,
+  EMAP_TRANSFORM_LOG10
+};
+
 #include <assert.h>
 
 #define EMAP_COMMENT_CHARS "#;"
@@ -20,13 +27,29 @@ typedef long double emap_float;
 
 static inline emap_float emap_float_abs(emap_float n)
 {
-        return fabs(n);
+        return fabsl(n);
 }
 
 static inline emap_float emap_strtoflt(const char *str, char **save)
 {
-        return strtod(str, save);
+        return strtold(str, save);
 }
+
+static inline emap_float emap_log(emap_float n)
+{
+	return logl(n);
+}
+
+static inline emap_float emap_log2(emap_float n)
+{
+	return log2l(n);
+}
+
+static inline emap_float emap_log10(emap_float n)
+{
+	return log10l(n);
+}
+
 #else
 typedef float  emap_float;
 #define EMAP_FLTFMT "f"
@@ -39,6 +62,21 @@ static inline emap_float emap_float_abs(emap_float n)
 static inline emap_float emap_strtoflt(const char *str, char **save)
 {
         return strtof(str, save);
+}
+
+static inline emap_float emap_log(emap_float n)
+{
+	return logf(n);
+}
+
+static inline emap_float emap_log2(emap_float n)
+{
+	return log2f(n);
+}
+
+static inline emap_float emap_log10(emap_float n)
+{
+	return log10f(n);
 }
 #endif
 

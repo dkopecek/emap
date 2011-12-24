@@ -88,6 +88,7 @@ emap_spoint_t *emap_mindist_tpoint(const emap_spoint_t *a, const emap_spoint_t *
 
 	(void)pdb;
 	(void)Eh;
+	(void)El;
 
 	assert(a != b);
 	assert(a != NULL);

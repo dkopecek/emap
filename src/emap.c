@@ -11,7 +11,7 @@
 #include "PES.h"
 #include "DG.h"
 
-#define EMAP_SHORT_OPTIONS "c:y:s:o:O:E:t:m:nhv"
+#define EMAP_SHORT_OPTIONS "c:y:s:o:O:E:t:T:m:nhv"
 
 static void fprintu(FILE *stream, char *arg0)
 {
@@ -23,15 +23,19 @@ static void fprintu(FILE *stream, char *arg0)
         fprintf(stream, "\t-y <n>         Column number representing the dependent variable:\n");
         fprintf(stream, "\t                  0 ... last column (default)\n");
         fprintf(stream, "\t                  n ... n-th column (max. %u)\n\n", (1<<16) - 1);
+	fprintf(stream, "\t-T <str>       Transform the dependent variables using a function:\n");
+	fprintf(stream, "\t                  log   ... logarithm to the base e\n");
+	fprintf(stream, "\t                  log2  ... logarithm to the base 2\n");
+	fprintf(stream, "\t                  log10 ... logarithm to the base 10\n\n");
         fprintf(stream, "\t-s <n>         Height of the energy band used in building the DG.\n");
         fprintf(stream, "\t               The value should be a floating point number larger\n");
         fprintf(stream, "\t               than 0.\n\n");
         fprintf(stream, "\t-E <n>[,...]   Exclude n-th column. Multiple columns may be specified.\n\n");
         fprintf(stream, "\t-c <str>       Comment characters (lines starting wich such characters\n");
+        fprintf(stream, "\t               will be skipped; default is \"%s\").\n\n", EMAP_COMMENT_CHARS);
         fprintf(stream, "\t-m <file>      Dump found local minima into `file'.\n");
         fprintf(stream, "\t-t <file>      Dump transition points into `file'.\n");
         fprintf(stream, "\t-n             Skip superbasin analysis and, therefore, building of the DG.\n");
-        fprintf(stream, "\t               will be skipped; default is \"%s\").\n\n", EMAP_COMMENT_CHARS);
         fprintf(stream, "\t-v             Be verbose.\n");
         fprintf(stream, "\t-h             This help.\n");
         fprintf(stream, "\n");
@@ -60,6 +64,8 @@ int main(int argc, char *argv[])
         emap_float dE = 0.0;
         bool skip_DG = false;
         char *dump_mfile = NULL, *dump_tfile = NULL;
+	enum emap_transfn opt_ytransform = EMAP_TRANSFORM_NONE;
+	char *opt_ytransform_str = "none";
 
         arg0     = argv[0];
         path_in  = NULL;
@@ -141,6 +147,21 @@ int main(int argc, char *argv[])
                 case 't':
                         dump_tfile = optarg;
                         break;
+                case 'T':
+			if (strcmp(optarg, "log") == 0)
+				opt_ytransform = EMAP_TRANSFORM_LOG;
+			else if (strcmp(optarg, "log2") == 0)
+				opt_ytransform = EMAP_TRANSFORM_LOG2;
+			else if (strcmp(optarg, "log10") == 0)
+				opt_ytransform = EMAP_TRANSFORM_LOG10;
+			else {
+				fprintf(stderr, "Unsupported transformation: %s\n", optarg);
+				fprintu(stderr, arg0);
+				return (EXIT_FAILURE);
+			}
+
+			opt_ytransform_str = strdup(optarg);
+                        break;
                 default:
                         fprintf(stderr, "Unknown option `%c'\n", optopt);
                         fprintu(stderr, arg0);
@@ -172,8 +193,12 @@ int main(int argc, char *argv[])
                 pI("Compiled with OpenMP support\n");
 #endif
                 pI("Loading data points from \"%s\"...\n", path_in);
+
+		if (opt_ytransform != EMAP_TRANSFORM_NONE)
+			pI("Note: Using %s transformation for the dependent variable\n", opt_ytransform_str);
         }
 
+	pdb.y_trans = opt_ytransform;
         ret = emap_pointdb_load(&pdb, path_in, opt_yn, skip_x_n, skip_n, opt_comment);
 
         if (ret != EMAP_SUCCESS) {
@@ -221,8 +246,8 @@ int main(int argc, char *argv[])
         POIdb.minima = NULL;
         POIdb.mcount = 0;
 
-        POIdb.transp = NULL;
-        POIdb.tcount = 0;
+        POIdb.transp  = NULL;
+        POIdb.tcount  = 0;
 
         emap_pointdb_apply_r(&pdb, collect_POI, &POIdb);
 
@@ -236,7 +261,7 @@ int main(int argc, char *argv[])
                 pI("Preparing an abstract surface for superbasin analysis...\n");
         }
 
-        es = POI_postprocess(&pdb, &POIdb);
+        es = POI_postprocess(&pdb, &POIdb, opt_verbose);
 
         if (es == NULL) {
                 if (opt_verbose)
@@ -331,7 +356,7 @@ int main(int argc, char *argv[])
         free(opt_comment);
 
 	if (opt_verbose)
-		pI("Done.\n");
+		pI("\nDone.\n");
 
         return (EXIT_SUCCESS);
 }

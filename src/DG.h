@@ -15,19 +15,12 @@ struct DG_node {
 	emap_float       El;    /**< if child != NULL, the energy level of the basin, otherwise the energy of the minimum */
 };
 
-enum emap_etrans {
-	EMAP_ETRANS_NONE,
-	EMAP_ETRANS_LOG,
-	EMAP_ETRANS_LOG2,
-	EMAP_ETRANS_LOG10
-};
-
 typedef struct {
         struct DG_node *root;
 	size_t mcount; /**< number of minima */
 	size_t ncount; /**< number of nodes */
 	emap_float dE;
-	enum emap_etrans Etrans; /**< transformation method of the energy values */
+	enum emap_transfn Etrans; /**< transformation method of the energy values */
 	emap_float Emax;
 	emap_float Emin;
 } DG_t;

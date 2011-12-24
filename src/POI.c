@@ -89,7 +89,7 @@ static int _spdist_cmp(const emap_spdist_t *a, const emap_spdist_t *b)
 	return emap_spoint_ymincmp(a->pptr, b->pptr);
 }
 
-emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
+emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb, bool progress)
 {
         emap_surface_t *es;
 	register size_t i, j;
@@ -120,7 +120,14 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                 array_remove(POIdb->points, &POIdb->pcount, POIdb->pcount - 1);
 
                 for (i = 0; i < POIdb->pcount; ++i) {
+			if (progress) {
+				printf("\r[i] %3.u%% m=%zu t=%zu p=%zu",
+				       (unsigned int)(((float)(i + 1)/(float)POIdb->pcount) * 100.0),
+				       es->mcount, es->tcount, POIdb->pcount);
+			}
+
                         for(j = 0; j < sp->compcount; ++j) {
+
                                 /*
                                  * Merge neighbors
                                  */
@@ -151,6 +158,9 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
                                 }
                         }
                 }
+
+		if (progress)
+			printf("\n");
 
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: new surface point %p with %zu components\n", sp, sp->compcount);
@@ -198,7 +208,7 @@ emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb)
 	/**
 	 * For each minumum, calculate the distance to each transition point
 	 */
-//#pragma omp parallel for private(cmin, dist)
+#pragma omp parallel for private(cmin, dist)
 	for (i = 0; i < es->mcount; ++i) {
 		dist = alloc_array(emap_spdist_t, es->tcount);
 		cmin = es->mpoint[i];

@@ -205,19 +205,17 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
                                 sb[i].firstm = true;
 				//printf("A!\n");
                         }
-                } else if (es->tpoint[Ti]->cminimum->y > Eh) {
+                } else if (es->tpoint[Ti]->cminimum->y >= Eh) {
 			Ti_min = Ti;
+#ifndef NDEBUG
+			fprintf(stderr, "DEBUG: Ti_min <- Ti (%zu)\n", Ti);
+#endif
 		}
 
 		if (merge_event || Ti_min == SIZE_MAX) {
 			El = Eh;
 			Eh = El + dE;
-
-			/*while (Eh == El) {
-				dE = dE * 10;
-				Eh = El + dE;
-				}*/
-
+			assert(El != Eh);
 			merge_event = 0;
 			Ti_min = SIZE_MAX;
 		} else {
@@ -226,30 +224,19 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
 			Tmin = es->tpoint[Ti_min];
 		
-			assert(Tmin->cmaximum->y > Eh);
-			assert(((Tmin->cmaximum->y - Eh)/ dE) > 0.0);
+#ifndef NDEBUG
+			fprintf(stderr, "DEBUG: Ti_min=%zu, Tmin->cmaximum->y = %"EMAP_FLTFMT"; Eh=%"EMAP_FLTFMT"\n",
+				Ti_min, Tmin->cmaximum->y, Eh);
+#endif
+			if (Tmin->cmaximum->y - dE/2 > El)
+			  El = Tmin->cmaximum->y - dE/2;
+			else
+			  El = Eh;
 
-			//dE2 = (roundl((Tmin->cmaximum->y - Eh)/ dE) - 1) * dE;
-
-			El = Tmin->cmaximum->y - dE/2;
 			Eh = El + dE;
 
-			//El  = Eh + dE2;
-			//Eh  = El + dE;
-
-			/*
-			  while (Eh == El) {
-				dE = dE * 10;
-				Eh = El + dE;
-				}*/
-
 			assert(El != Eh);
-
 			Ti_min = SIZE_MAX;
-
-#ifndef NDEBUG
-			fprintf(stderr, "DEBUG: energy band skip: dE2=%"EMAP_FLTFMT"\n", dE2);
-#endif
 		}
 #ifndef NDEBUG
                 fprintf(stderr, "DEBUG: moving to energy band <%"EMAP_FLTFMT", %"EMAP_FLTFMT">\n", El, Eh);
@@ -262,7 +249,7 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 
         dg = alloc_type(DG_t);
         dg->root = sb[0].dgnode;
-	dg->Etrans = EMAP_ETRANS_NONE;
+	dg->Etrans = pdb->y_trans;
 	dg->mcount = es->mcount;
 	dg->ncount = ncount;
 	dg->dE = dE;
@@ -360,16 +347,16 @@ int DG_write_emap(DG_t *dg, const char *path)
 	}
 
 	switch(dg->Etrans) {
-	case EMAP_ETRANS_LOG:
+	case EMAP_TRANSFORM_LOG:
 		Etrans = "log";
 		break;
-	case EMAP_ETRANS_LOG2:
+	case EMAP_TRANSFORM_LOG2:
 		Etrans = "log2";
 		break;
-	case EMAP_ETRANS_LOG10:
+	case EMAP_TRANSFORM_LOG10:
 		Etrans = "log10";
 		break;
-	case EMAP_ETRANS_NONE:
+	case EMAP_TRANSFORM_NONE:
 	default:
 		Etrans = "none";
 		break;

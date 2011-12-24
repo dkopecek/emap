@@ -29,6 +29,6 @@ typedef struct {
 
 uint32_t is_POI(emap_pointdb_t *pdb, emap_point_t *p, emap_point_t *n);
 void     collect_POI(emap_pointdb_t *pdb, emap_point_t *p, void *arg);
-emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb);
+emap_surface_t *POI_postprocess(emap_pointdb_t *pdb, POIdb_t *POIdb, bool progress);
 
 #endif /* POI_H */

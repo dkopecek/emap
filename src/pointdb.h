@@ -62,6 +62,7 @@ typedef struct {
         emap_point_t **psort; /**< array of sorted points by each independent variable */
         rbt_t         *pindex; /**< point index for nearest neighbor search */
         uint32_t      *keymax; /**< maximum values of each key component */
+	enum emap_transfn y_trans; /**< y transformation function */
 } emap_pointdb_t;
 
 static inline emap_point_t *emap_pointp(emap_pointdb_t *pdb, size_t pi)
