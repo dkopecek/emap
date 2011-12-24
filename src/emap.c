@@ -58,7 +58,8 @@ int main(int argc, char *argv[])
         DG_t *dg;
         emap_surface_t *es;
 
-        uint32_t *skip_x_n = NULL, x_n;
+        uint32_t *skip_x_n = NULL;
+	int32_t x_n;
         size_t    skip_n   = 0;
 
         emap_float dE = 0.0;
@@ -194,8 +195,10 @@ int main(int argc, char *argv[])
 #endif
                 pI("Loading data points from \"%s\"...\n", path_in);
 
-		if (opt_ytransform != EMAP_TRANSFORM_NONE)
+		if (opt_ytransform != EMAP_TRANSFORM_NONE) {
 			pI("Note: Using %s transformation for the dependent variable\n", opt_ytransform_str);
+			free(opt_ytransform_str);
+		}
         }
 
 	pdb.y_trans = opt_ytransform;

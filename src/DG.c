@@ -220,7 +220,6 @@ DG_t *DG_create(emap_pointdb_t *pdb, emap_surface_t *es, emap_float dE, bool pro
 			Ti_min = SIZE_MAX;
 		} else {
 			emap_spoint_t *Tmin;
-			emap_float dE2;
 
 			Tmin = es->tpoint[Ti_min];
 		
