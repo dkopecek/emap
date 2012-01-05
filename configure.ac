@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([emap], [0.1], [xkopecek@fi.muni.cz])
+AC_INIT([emap], [1.0], [xkopecek@fi.muni.cz])
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
